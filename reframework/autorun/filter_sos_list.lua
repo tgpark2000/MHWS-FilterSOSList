@@ -116,24 +116,14 @@ local config = {
         mode    = "Custom",
         custom = {
             operator    = "AND",
-            target_list = { -- ["item_id"] = number or false
-                ["469"]      = false,
-                ["470"]      = false,
-                ["478"]      = false,
-                ["157"]      = false,
-                ["620"]      = false,
-                ["653"]      = false,
-                ["820"]      = false,
-                ["WISHLIST"] = false,
-                ["GEM"]      = false,
-            },
+            target_list = { ["469"] = false, ["470"] = false, ["478"] = false, ["157"] = false, ["620"] = false, ["653"] = false, ["820"] = false, ["WISHLIST"] = false, ["GEM"] = false, }, -- ["item_id"] = number or false
         },
         max_quantity = {
             target_item = "469",
         },
     },
     lobby_member_quest_filters = {
-        enabled          = false,
+        enabled = false,
         without_password = {
             enabled = false
         },
