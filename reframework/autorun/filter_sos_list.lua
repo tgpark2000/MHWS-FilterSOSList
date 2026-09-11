@@ -594,12 +594,14 @@ local function filter_sos_quest_list(quest_list)
                     if not block_list_service then block_list_service = network_manager:get_BlockListService() end
                     local user_ids = session_data:getQuestMembersUserId()
                     local length   = user_ids:get_size()
+                    local found    = false
                     for j = 0, length - 1 do
                         local user_id     = user_ids:get_Item(j)
                         local guid_string = create_guid_string(user_id)
                         local guid        = get_system_guid(guid_string)
-                        if guid and block_list_service:isBlock(guid) then should_remove = true; break end
+                        if guid and block_list_service:isBlock(guid) then found = true; break end
                     end
+                    if found then should_remove = true; break end
                 end
 
                 conf = filters.wishlist
@@ -723,12 +725,14 @@ local function filter_lobby_member_quest_list(quest_list)
                 if not block_list_service then block_list_service = network_manager:get_BlockListService() end
                 local user_ids = session_data:getQuestMembersUserId()
                 local length   = user_ids:get_size()
+                local found    = false
                 for j = 0, length - 1 do
                     local user_id     = user_ids:get_Item(j)
                     local guid_string = create_guid_string(user_id)
                     local guid        = get_system_guid(guid_string)
-                    if guid and block_list_service:isBlock(guid) then should_remove = true; break end
+                    if guid and block_list_service:isBlock(guid) then found = true; break end
                 end
+                if found then should_remove = true; break end
             end
         until true
         if should_remove and not is_contains(quests_to_remove, i) then table.insert(quests_to_remove, i) end
