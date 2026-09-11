@@ -203,6 +203,10 @@ local ACCEPT_MODE_LIST <const>   = {  "Auto",          "Manual" }
 local ACCEPT_MODE_LOOKUP <const> = { ["Auto"] = 1,    ["Manual"] = 2 }
 local is_auto_accept <const>     = { ["Auto"] = true, ["Manual"] = false }
 
+local NPC_ONLY <const>            = sdk.find_type_definition("app.net_quest_session.cCreateQuestSessionInfo.MULTIPLAY_SETTING"):get_field("NPC_ONLY"):get_data() or 2
+local SERCH_RESCUE_SIGNAL <const> = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("SERCH_RESCUE_SIGNAL"):get_data()
+local RECRUITMENT_LOBBY <const>   = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("RECRUITMENT_LOBBY"):get_data()
+
 local LOCALIZED_TEXT_MAP = {}
 local GUID_MAP <const>   = {
     ["Plains"]                  = "e232918e-ee5a-4723-9618-ad8799eb8dc1",
@@ -266,10 +270,10 @@ function ENEMY_BOSS.update()
             if not field:is_static() then break end
             local id = field:get_data()
             if not get_is_em_valid:call(nil, id) or not get_is_em_boss:call(nil, id) then break end
-            local specics_fixed = get_em_species_fixed:call(nil, id)
-            if (specics_fixed == ENEMY_BOSS.INVALID_SPECIES) then break end
+            local species_fixed = get_em_species_fixed:call(nil, id)
+            if (species_fixed == ENEMY_BOSS.INVALID_SPECIES) then break end
 
-            local specics_data  = get_em_species_data:call(nil, specics_fixed - 1)
+            local specics_data  = get_em_species_data:call(nil, species_fixed - 1)
             local guid_specics  = specics_data:get_EmSpeciesName()
             local guid_name     = get_em_name:call(nil, id)
             local name          = convert_guid_to_text:call(nil, guid_name, 0)
@@ -279,7 +283,7 @@ function ENEMY_BOSS.update()
             id                                    = tostring(id)
             ENEMY_BOSS.NAME_MAP[name]             = id
             ENEMY_BOSS.ID_MAP[id]                 = name
-            ENEMY_BOSS.SPECIES_MAP[specics_fixed] = specics_type
+            ENEMY_BOSS.SPECIES_MAP[species_fixed] = specics_type
             table.insert(ENEMY_BOSS.NAME_LIST, name)
             if (conf_name_list[id] == nil) then conf_name_list[id] = false end
         until true
@@ -417,6 +421,7 @@ local function save_config(force)
     json.dump_file(CONFIG_FILE, config)
     old_config = array_deep_copy(config)
 end
+re.on_config_save(save_config)
 
 local function load_config()
     if old_config then return end
@@ -436,19 +441,6 @@ local function initialize()
 end initialize()
 sdk.hook(sdk.find_type_definition("app.GUI020001"):get_method(".ctor()"), function(args) initialize() end) 
 
-local function filter_reward_items(reward_table)
-    local conf          = config.item_filters.custom
-    local is_logical_or = (conf.operator == "OR")
-    for item_id, min_required in pairs(conf.target_list) do
-        if min_required then
-            local amount = reward_table[item_id] or 0
-            if (amount >= min_required) then if     is_logical_or then return false end 
-            else                             if not is_logical_or then return true  end end
-        end
-    end
-    return is_logical_or
-end
-
 local network_manager     = sdk.get_managed_singleton("app.NetworkManager")
 local context_manager     = network_manager:get_ContextManager()
 local player_platform_id  = context_manager:get_PlatformId()
@@ -459,209 +451,231 @@ local wishlist_util       = sdk.find_type_definition("app.WishlistUtil")
 local is_wishlist_item    = wishlist_util:get_method("isItemRequiredForWishlist(app.ItemDef.ID)")
 local is_wishlist_quest   = wishlist_util:get_method("isExQuestRequiredForWishlist(app.cExEnemyRewardItemInfo, app.EnemyDef.ID[], app.EnemyDef.ROLE_ID[], app.EnemyDef.LEGENDARY_ID[], app.QuestDef.RANK, app.QuestDef.EM_REWARD_RANK[], System.Boolean)") 
 local is_wishlist_mission = wishlist_util:get_method("isQuestRequiredForWishlist(app.MissionIDList.ID, app.QuestDef.RANK)")
-local function filter_sos_quest_list(quest_list)
-    if not quest_list then return end
+local filter_order = {
+    "quest_join_approval",
+    "blocked_users",
+    "joinable_quest",
+    "without_password",
+    "monster_species",
+    "quest_level",
+    "host_hr",
+    "quest_started_time",
+    "quest_multiplay_setting",
+    "wishlist",
+    "monster_name",
+    "monster_count",
+    "monster_threat",
+    "current_players",
+    "max_players",
+    "quest_fields",
+    "quest_environment",
+    "item_reward_custom",
+}
 
-    local quest_list_size = quest_list:get_Count()
-    if quest_list_size == 0 then return end 
+local filter_methods = { -- return true if the quest should be filtered out (removed) from the list
+    ["quest_join_approval"] = function(quest_data, conf) 
+        local session_data = quest_data.Session  -- app.cGUIQuestViewData.cGUISessionData
+        return (is_auto_accept[conf.value] ~= session_data:get_isAutoAccept())
+    end,
+    ["quest_started_time"] = function(quest_data, conf) 
+        local session_data         = quest_data.Session
+        local started_at           = session_data:get_StartTime()
+              started_at           = (started_at > 0) and started_at or session_data:get_AcceptedTime()
+        local started_difference   = (os.time() - started_at) / 60
+        return (started_difference >= conf.value)
+    end,
+    ["quest_multiplay_setting"] = function(quest_data, conf) 
+        local session_data  = quest_data.Session
+        local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
+        return (search_result.multiplaySetting ~= (MULTIPLAY_TYPE_LOOKUP[conf.value] - 1))
+    end,
+    ["quest_fields"] = function(quest_data, conf) 
+        local session_data  = quest_data.Session
+        local search_result = session_data:get_SearchResult()
+        local field         = FIELD_ID_MAP[search_result.fieldId]
+        return not conf.list[field]
+    end,
+    ["quest_environment"] = function(quest_data, conf) 
+        local session_data  = quest_data.Session
+        local search_result = session_data:get_SearchResult()
+        local environment   = ENVIRONMENT_ID_MAP[search_result.envType]
+        return not conf.list[environment]
+    end,
+    ["blocked_users"] = function(quest_data, conf) 
+        local session_data = quest_data.Session
+        local user_ids     = session_data:getQuestMembersUserId()
+        local length       = user_ids:get_size()
+        for j = 0, length - 1 do
+            local user_id     = user_ids:get_Item(j)
+            local guid_string = create_guid_string(user_id)
+            local guid        = get_system_guid(guid_string)
+            if guid and block_list_service:isBlock(guid) then return true end
+        end
+        return false
+    end,
+    ["wishlist"] = function(quest_data, conf) 
+        local is_quest_wishlisted = false
+        local session_data        = quest_data.Session
+        local search_result       = session_data:get_SearchResult()
+        local active_quest        = quest_data:get_ActiveQuestData()
+        local quest_rank          = search_result.questRank           -- app.QuestDef.RANK
+        if active_quest then
+            local mission_id = active_quest:get_MissionId()
+            if (mission_id ~= -1) then is_quest_wishlisted = is_wishlist_mission:call(wishlist_util, mission_id, quest_rank) end
+        end
+        if not is_quest_wishlisted then
+            local quest_reward_obj    = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
+            local monster_ids         = quest_data:get_TargetEmId()             -- app.EnemyDef.ID[] get_TargetEmId()
+            local quest_role_ids      = quest_data:get_TargetEmRoleId()         -- app.EnemyDef.ROLE_ID[] get_TargetEmRoleId()
+            local quest_legendary_ids = quest_data:get_TargetEmLegendaryId()    -- app.EnemyDef.LEGENDARY_ID[] get_TargetEmLegendaryId()
+            local quest_reward_ranks  = quest_data:getTargetEmRewardRank()      -- app.QuestDef.EM_REWARD_RANK[]
+                  is_quest_wishlisted = is_wishlist_quest:call(wishlist_util, quest_reward_obj, monster_ids, quest_role_ids, quest_legendary_ids, quest_rank, quest_reward_ranks, true) 
+        end
+        return not is_quest_wishlisted
+    end,
+    ["monster_name"] = function(quest_data, conf) 
+        local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
+        local monster_count = monster_ids:get_size()
+        for k = 0, monster_count - 1 do 
+            local em_id = monster_ids:get_Item(k)
+            if conf.list[tostring(em_id)] then return false end
+        end
+        return true
+    end,
+    ["monster_count"] = function(quest_data, conf) 
+        local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
+        local monster_count = monster_ids:get_size()
+        local comparison    = conf.comparison or COMPARISON_TYPE_LIST[1]
+        local evaluator     = EVALUATORS[comparison]
+        return not (evaluator and evaluator(monster_count, conf.value))
+    end,
+    ["monster_threat"] = function(quest_data, conf) 
+        local monster_difficulties       = quest_data:getTragetEmDifficulityRank()  -- 게임 API 자체 오타였다
+        local monster_difficulties_count = monster_difficulties:get_size()
+        local comparison                 = conf.comparison or COMPARISON_TYPE_LIST[1]
+        local evaluator                  = EVALUATORS[comparison]
+        for diff_index = 0, monster_difficulties_count - 1 do
+            local monster_difficulty = monster_difficulties:get_Item(diff_index)
+            if evaluator and evaluator(monster_difficulty, conf.value) then return false end
+        end
+        return true
+    end,
+    ["quest_level"] = function(quest_data, conf) 
+        local quest_level = quest_data:get_QuestLv()
+        local comparison  = conf.comparison or COMPARISON_TYPE_LIST[1]
+        local evaluator   = EVALUATORS[comparison]
+        return not (evaluator and evaluator(quest_level, conf.value))
+    end,
+    ["host_hr"] = function(quest_data, conf) 
+        local session_data = quest_data.Session
+        local host_hr      = session_data:get_HostHr()
+        local min, max     = conf.min, conf.max
+        local need_check   = true
+        local threshold    = conf.threshold
+        if threshold.enabled then
+            local comparison = threshold.comparison or COMPARISON_TYPE_LIST[1]
+            local evaluator  = EVALUATORS[comparison]
+            if not (evaluator and evaluator(quest_data:get_QuestLv(), threshold.value)) then need_check = false end
+        end
+        return need_check and ((host_hr <= min) or (host_hr >= max))
+    end,
+    ["monster_species"] = function(quest_data, conf) 
+        local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
+        local monster_count = monster_ids:get_size()
+        for k = 0, monster_count - 1 do 
+            local species_fixed = get_em_species_fixed:call(nil, monster_ids:get_Item(k))
+            if (species_fixed == conf.value) then return false end
+        end
+        return true
+    end,
+    ["current_players"] = function(quest_data, conf) 
+        local session_data   = quest_data.Session
+        local current_players = session_data:get_MemberNum()
+        local comparison      = conf.comparison or COMPARISON_TYPE_LIST[3]
+        local evaluator       = EVALUATORS[comparison]
+        return not (evaluator and evaluator(current_players, conf.value))
+    end,
+    ["max_players"] = function(quest_data, conf) 
+        local session_data  = quest_data.Session
+        local search_result = session_data:get_SearchResult()
+        local max_players   = search_result.maxMemberNum
+        local comparison    = conf.comparison or COMPARISON_TYPE_LIST[2]
+        local evaluator     = EVALUATORS[comparison]
+        return not (evaluator and evaluator(max_players, conf.value))
+    end,
+    ["joinable_quest"] = function(quest_data, conf) 
+        local session_data  = quest_data.Session
+        local is_full = ((session_data:get_MemberMax() - session_data:get_MemberNum()) == 0)
+        if is_full then return true end
+        local search_result = session_data:get_SearchResult() 
+        if (search_result.multiplaySetting == NPC_ONLY) then return true end
+        if search_result.isSamePlatform then 
+            local host_info = search_result:getHostHunterInfo()
+            if (host_info.platformId ~= player_platform_id) then return true end
+        end
+        return false
+    end,
+    ["without_password"] = function(quest_data, conf) 
+        local session_data  = quest_data.Session
+        return session_data:get_IsNeedPassword()
+    end,
+    ["item_reward_custom"] = function(quest_data, conf)
+        local reward_table     = {}
+        local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
+        local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
+        for item_i = 0, item_work_list._size - 1 do
+            local item_work                = item_work_list:get_Item(item_i)
+            local item_id                  = tostring(item_work:get_ItemId())
+            local item_num                 = item_work.Num or 0
+            local quest_reward_on_wishlist = is_wishlist_item:call(wishlist_util, tonumber(item_id))
+            if quest_reward_on_wishlist          then reward_table["WISHLIST"] = (reward_table["WISHLIST"] and reward_table["WISHLIST"] or 0) + item_num end
+            if is_contains(GEM_ID_LIST, item_id) then item_id                  = "GEM"                                                                   end
+            reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
+        end
 
-    local quests_to_remove = {}
-    local max_quantity     = 0
-    local conf
-
-    for i = 0, quest_list_size - 1 do
-        local should_remove = false
-        repeat
-            local quest_data = quest_list:get_Item(i)
-            if not quest_data then break end
-
-            local quest_level   = quest_data:get_QuestLv()
-            local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
-            local monster_count = monster_ids:get_size()
-            local session_data  = quest_data.Session               -- app.cGUIQuestViewData.cGUISessionData
-            local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
-
-            local filters = config.general_filters
-            if filters.enabled then
-                conf = filters.quest_join_approval
-                if conf.enabled then
-                    if (is_auto_accept[conf.value] ~= session_data:get_isAutoAccept()) then should_remove = true; break end
-                end
-
-                conf = filters.quest_started_time
-                if conf.enabled then
-                    local started_at         = session_data:get_StartTime()
-                    local started_at         = (started_at > 0) and started_at or session_data:get_AcceptedTime()
-                    local started_difference = (os.time() - started_at) / 60
-                    if (started_difference >= conf.value) then should_remove = true; break end
-                end
-
-                conf = filters.quest_multiplay_setting
-                if conf.enabled and (search_result.multiplaySetting ~= (MULTIPLAY_TYPE_LOOKUP[conf.value] - 1)) then should_remove = true; break end
-
-                conf = filters.quest_fields
-                if conf.enabled then
-                    local field = FIELD_ID_MAP[search_result.fieldId]
-                    if not conf.list[field] then should_remove = true; break end
-                end
-
-                conf = filters.quest_environment
-                if conf.enabled then
-                    local environment = ENVIRONMENT_ID_MAP[search_result.envType]
-                    if not conf.list[environment] then should_remove = true; break end
-                end
-
-                conf = filters.monster_name
-                if conf.enabled then
-                    local found = false
-                    for k = 0, monster_count - 1 do 
-                        local em_id = monster_ids:get_Item(k)
-                        if conf.list[tostring(em_id)] then found = true; break end
-                    end
-                    if not found then should_remove = true; break end
-                end
-
-                conf = filters.monster_count
-                if conf.enabled then
-                    local comparison = conf.comparison or COMPARISON_TYPE_LIST[1]
-                    local evaluator  = EVALUATORS[comparison]
-                    if not evaluator or not evaluator(monster_count, conf.value) then should_remove = true; break end
-                end
-
-                conf = filters.monster_threat
-                if conf.enabled then
-                    local monster_difficulties       = quest_data:getTragetEmDifficulityRank()  -- 게임 API 자체 오타였다
-                    local monster_difficulties_count = monster_difficulties:get_size()
-                    local comparison                 = conf.comparison or COMPARISON_TYPE_LIST[1]
-                    local evaluator                  = EVALUATORS[comparison]
-                    local found                      = false
-                    for diff_index = 0, monster_difficulties_count - 1 do
-                        local monster_difficulty = monster_difficulties:get_Item(diff_index)
-                        if evaluator and evaluator(monster_difficulty, conf.value) then found = true; break end
-                    end
-                    if not found then should_remove = true; break end
-                end
-
-                conf = filters.quest_level
-                if conf.enabled then
-                    local comparison = conf.comparison or COMPARISON_TYPE_LIST[1]
-                    local evaluator  = EVALUATORS[comparison]
-                    if not evaluator or not evaluator(quest_level, conf.value) then should_remove = true; break end
-                end
-
-                conf = filters.host_hr
-                if conf.enabled then
-                    local host_hr    = session_data:get_HostHr()
-                    local min, max   = conf.min, conf.max
-                    local need_check = true
-                    local threshold  = conf.threshold
-                    if threshold.enabled then
-                        local comparison = threshold.comparison or COMPARISON_TYPE_LIST[1]
-                        local evaluator  = EVALUATORS[comparison]
-                        if not (evaluator and evaluator(quest_level, threshold.value)) then need_check = false end
-                    end
-                    if need_check and ((host_hr <= min) or (host_hr >= max)) then should_remove = true; break end
-                end
-
-                conf = filters.monster_species
-                if conf.enabled then
-                    local found = false
-                    for k = 0, monster_count - 1 do 
-                        local species_fixed = get_em_species_fixed:call(nil, monster_ids:get_Item(k))
-                        if species_fixed == conf.value then found = true; break end
-                    end
-                    if not found then should_remove = true; break end
-                end
-
-                conf = filters.current_players
-                if conf.enabled then
-                    local current_players = session_data:get_MemberNum()
-                    local comparison      = conf.comparison or COMPARISON_TYPE_LIST[3]
-                    local evaluator       = EVALUATORS[comparison]
-                    if not evaluator or not evaluator(current_players, conf.value) then should_remove = true; break end
-                end
-
-                conf = filters.max_players
-                if conf.enabled then
-                    local max_players = session_data:get_MemberMax()
-                    local comparison  = conf.comparison or COMPARISON_TYPE_LIST[1]
-                    local evaluator   = EVALUATORS[comparison]
-                    if not evaluator or not evaluator(max_players, conf.value) then should_remove = true; break end
-                end
-
-                conf = filters.blocked_users  -- SOS 구조신호에선 테스트 못 했으나 로비 멤버 퀘스트에선 동작 확인했음
-                if conf.enabled then
-                    if not block_list_service then block_list_service = network_manager:get_BlockListService() end
-                    local user_ids = session_data:getQuestMembersUserId()
-                    local length   = user_ids:get_size()
-                    for j = 0, length - 1 do
-                        local user_id     = user_ids:get_Item(j)
-                        local guid_string = create_guid_string(user_id)
-                        local guid        = get_system_guid(guid_string)
-                        if guid and block_list_service:isBlock(guid) then should_remove = true; break end
-                    end
-                end
-
-                conf = filters.wishlist
-                if conf.enabled then
-                    local is_quest_wishlisted = false
-                    local active_quest        = quest_data:get_ActiveQuestData()
-                    local quest_rank          = search_result.questRank           -- app.QuestDef.RANK
-                    if active_quest then
-                        local mission_id = active_quest:get_MissionId()
-                        if (mission_id ~= -1) then is_quest_wishlisted = is_wishlist_mission:call(wishlist_util, mission_id, quest_rank) end
-                    end
-                    if not is_quest_wishlisted then
-                        local quest_reward_obj    = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
-                        local quest_role_ids      = quest_data:get_TargetEmRoleId()         -- app.EnemyDef.ROLE_ID[] get_TargetEmRoleId()
-                        local quest_legendary_ids = quest_data:get_TargetEmLegendaryId()    -- app.EnemyDef.LEGENDARY_ID[] get_TargetEmLegendaryId()
-                        local quest_reward_ranks  = quest_data:getTargetEmRewardRank()      -- app.QuestDef.EM_REWARD_RANK[]
-                              is_quest_wishlisted = is_wishlist_quest:call(wishlist_util, quest_reward_obj, monster_ids, quest_role_ids, quest_legendary_ids, quest_rank, quest_reward_ranks, true) 
-                    end
-                    if not is_quest_wishlisted then should_remove = true; break end
-                end
+        local is_logical_or = (conf.custom.operator == "OR")
+        local target_list   = conf.custom.target_list
+        for item_id, min_required in pairs(target_list) do
+            if min_required then
+                local amount = reward_table[item_id] or 0
+                if (amount >= min_required) then if     is_logical_or then return false end 
+                else                             if not is_logical_or then return true  end end
             end
+        end
+        return is_logical_or
+    end,
+    ["item_reward_max_quantity"] = function(quest_list, target_item)
+        if not quest_list then return end
 
-            conf = config.item_filters
-            if conf.enabled then
+        local quest_list_size = quest_list:get_Count()
+        if quest_list_size == 0 then return end 
+
+        local max_quantity = 0
+        for i = (quest_list_size - 1), 0, -1 do
+            repeat
+                local quest_data = quest_list:get_Item(i)
+                if not quest_data then break end
+
                 local reward_table     = {}
                 local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
                 local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
-                local is_custom_mode   = (conf.mode == "Custom")
                 for item_i = 0, item_work_list._size - 1 do
-                    local item_work                = item_work_list:get_Item(item_i)
-                    local item_id                  = tostring(item_work:get_ItemId())
-                    local item_num                 = item_work.Num or 0
-                    local quest_reward_on_wishlist = nil
-                    if is_custom_mode                    then quest_reward_on_wishlist = is_wishlist_item:call(wishlist_util, tonumber(item_id))                 end
-                    if quest_reward_on_wishlist          then reward_table["WISHLIST"] = (reward_table["WISHLIST"] and reward_table["WISHLIST"] or 0) + item_num end
-                    if is_contains(GEM_ID_LIST, item_id) then item_id                  = "GEM"                                                                   end
+                    local item_work = item_work_list:get_Item(item_i)
+                    local item_id   = tostring(item_work:get_ItemId())
+                    local item_num  = item_work.Num or 0
 
+                    if is_contains(GEM_ID_LIST, item_id) then item_id = "GEM" end
                     reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
                 end
 
-                if is_custom_mode and filter_reward_items(reward_table) then should_remove = true; break end
+                local item_num = reward_table[target_item] or 0
+                if     (item_num < max_quantity) then quest_list:RemoveAt(i)  break 
+                elseif (item_num > max_quantity) then max_quantity = item_num end 
+            until true
+        end
 
-                local item_num = reward_table[conf.max_quantity.target_item] or 0
-                if not is_custom_mode then  
-                    if     not item_num or (item_num < max_quantity) then should_remove = true     break 
-                    elseif (item_num > max_quantity)                 then max_quantity  = item_num end 
-                end
-            end
-        until true
-        
-        if should_remove and not is_contains(quests_to_remove, i) then table.insert(quests_to_remove, i) end
-    end
-
-    for index = #quests_to_remove, 1, -1 do
-        quest_list:RemoveAt(quests_to_remove[index])
-    end
-
-    conf = config.item_filters
-    if conf.enabled and (conf.mode == "Max Quantity") then
-              conf  = conf.max_quantity
-        local count = quest_list:get_Count()
-        for i = (count - 1), 0, -1 do
+        quest_list_size = quest_list:get_Count()
+        for i = (quest_list_size - 1), 0, -1 do
             if (max_quantity == 0) then quest_list:RemoveAt(i)
             else
                 local quest_data       = quest_list:get_Item(i)
@@ -670,84 +684,49 @@ local function filter_sos_quest_list(quest_list)
                 local total_quantity   = 0
                 for index = 0, item_work_list._size - 1 do
                     local item_work = item_work_list:get_Item(index)
-                    if (conf.target_item == tostring(item_work:get_ItemId())) then total_quantity = total_quantity + item_work.Num end
+                    if (target_item == tostring(item_work:get_ItemId())) then total_quantity = total_quantity + item_work.Num end
                 end
                 if (total_quantity < max_quantity) then quest_list:RemoveAt(i) end
             end
         end
-    end
-end
+    end,
+}
 
-local NPC_ONLY <const> = sdk.find_type_definition("app.net_quest_session.cCreateQuestSessionInfo.MULTIPLAY_SETTING"):get_field("NPC_ONLY"):get_data() or 2
-local function filter_lobby_member_quest_list(quest_list)
-    if not quest_list then return end
-
-    local quest_list_size = quest_list:get_Count()
-    if quest_list_size == 0 then return end 
-
-    local quests_to_remove = {}
-    local filters          = config.lobby_member_quest_filters
-
-    for i = 0, quest_list_size - 1 do
-        local should_remove = false
-        repeat
-            local quest_data = quest_list:get_Item(i)
-            if not quest_data then break end
-
-            local session_data = quest_data.Session  -- app.cGUIQuestViewData.cGUISessionData
-
-            local conf = filters.without_password
-            if conf.enabled then
-                if session_data:get_IsNeedPassword() then should_remove = true; break end
-            end
-
-            conf = filters.quest_join_approval
-            if conf.enabled then
-                if (is_auto_accept[conf.value] ~= session_data:get_isAutoAccept()) then should_remove = true; break end
-            end
-
-            conf = filters.joinable_quest
-            if conf.enabled then
-                local is_full = ((session_data:get_MemberMax() - session_data:get_MemberNum()) == 0)
-                if is_full then should_remove = true; break end
-                local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
-                if (search_result.multiplaySetting == NPC_ONLY) then should_remove = true; break end
-                if search_result.isSamePlatform then 
-                    local host_info = search_result:getHostHunterInfo()
-                    if (host_info.platformId ~= player_platform_id) then should_remove = true; break end
-                end                
-            end
-
-            conf = filters.blocked_users
-            if conf.enabled then  -- 같은 계정의 다른 캐릭터의 적용 여부는 확인하지 못 했음
-                if not block_list_service then block_list_service = network_manager:get_BlockListService() end
-                local user_ids = session_data:getQuestMembersUserId()
-                local length   = user_ids:get_size()
-                for j = 0, length - 1 do
-                    local user_id     = user_ids:get_Item(j)
-                    local guid_string = create_guid_string(user_id)
-                    local guid        = get_system_guid(guid_string)
-                    if guid and block_list_service:isBlock(guid) then should_remove = true; break end
-                end
-            end
-        until true
-        if should_remove and not is_contains(quests_to_remove, i) then table.insert(quests_to_remove, i) end
-    end
-
-    for index = #quests_to_remove, 1, -1 do
-        quest_list:RemoveAt(quests_to_remove[index])
-    end
-end
-    
-local SERCH_RESCUE_SIGNAL <const> = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("SERCH_RESCUE_SIGNAL"):get_data()
-local RECRUITMENT_LOBBY <const>   = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("RECRUITMENT_LOBBY"):get_data()
 sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sortQuestDataList(System.Boolean)"), function(args)
     if not config.enabled then return end
     local quest_list_parts = sdk.to_managed_object(args[2])
     local category         = quest_list_parts:get_field("<ViewCategory>k__BackingField")
-    if     (category == SERCH_RESCUE_SIGNAL) and (config.general_filters.enabled or config.item_filters.enabled) then filter_sos_quest_list(quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")) 
-    elseif (category == RECRUITMENT_LOBBY)   and config.lobby_member_quest_filters.enabled                       then filter_lobby_member_quest_list(quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")) end
-return sdk.PreHookResult.CALL_ORIGINAL end) 
+    if not ((category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY)) then return end
+    local quest_list      = quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")
+    local quest_list_size = quest_list:get_Count()
+    if (quest_list_size <= 0) then return end
+
+    local conf_list, reward_conf, is_reward_max_quantity = nil, nil, nil
+    if (category == RECRUITMENT_LOBBY) then conf_list = config.lobby_member_quest_filters 
+    else
+        conf_list   = config.general_filters
+        reward_conf = config.item_filters
+        if reward_conf.enabled then is_reward_max_quantity = (reward_conf.mode == "Max Quantity") end
+    end
+
+    for i = quest_list_size - 1, 0, -1 do
+        local quest_data = quest_list:get_Item(i)
+        if quest_data then
+            local should_remove = false
+            for _, filter_name in ipairs(filter_order) do
+                local filter_config = conf_list[filter_name] or (((filter_name == "item_reward_custom") and (not is_reward_max_quantity)) and reward_conf)
+                if filter_config and filter_config.enabled then
+                    local filter_method = filter_methods[filter_name]
+                    if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
+                end
+            end
+            if should_remove then quest_list:RemoveAt(i) end
+        end
+    end
+
+    if not is_reward_max_quantity then return end
+    filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
+return sdk.PreHookResult.CALL_ORIGINAL end)
 
 local function draw_settings_checkbox(setting_name, conf)
     local changed, value = imgui.checkbox("##filter_sos_list_" .. setting_name, conf.enabled or false)
@@ -1316,7 +1295,6 @@ sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("closeQuestDetailW
 sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("onEnter()"),  function(args)  open_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
 sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("nextFlow()"), function(args) close_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
 
-re.on_config_save(save_config)
 re.on_draw_ui(function()
 	if imgui.tree_node("Filter SOS List##filter_sos_list_config") then
         if is_window_open then
