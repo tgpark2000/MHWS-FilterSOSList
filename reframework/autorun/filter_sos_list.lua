@@ -39,6 +39,17 @@ local convert_guid_to_text = sdk.find_type_definition("app.MessageUtil"):get_met
 local system_guid          = sdk.find_type_definition("System.Guid")
 local try_parse_guid       = system_guid:get_method("Parse(System.String)")
 local create_system_guid   = function(guid_string) return try_parse_guid and try_parse_guid:call(nil, guid_string) end
+local create_guid_string   = function(guid_obj) return guid_obj and string.format("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", guid_obj.mData1, guid_obj.mData2, guid_obj.mData3, guid_obj.mData4_0, guid_obj.mData4_1, guid_obj.mData4_2, guid_obj.mData4_3, guid_obj.mData4_4, guid_obj.mData4_5, guid_obj.mData4_6, guid_obj.mData4_7) end
+local system_guid_cache    = {}
+local function get_system_guid(guid_string)
+    if not guid_string then return nil end
+    local guid = system_guid_cache[guid_string]
+    if not guid then
+        guid                           = create_system_guid(guid_string)
+        system_guid_cache[guid_string] = guid
+    end
+    return guid
+end
 
 local config = {
     enabled = true,
@@ -77,15 +88,18 @@ local config = {
                 comparison = "at least",
             },
         },
+        max_players = {
+            enabled    = false,
+            value      = 4,
+            comparison = "at most",
+        },
         current_players = {
             enabled    = false,
             value      = 1,
             comparison = "at least",
         },
-        max_players = {
-            enabled    = false,
-            value      = 4,
-            comparison = "at most",
+        blocked_users = {
+            enabled = false,
         },
         wishlist = {
             enabled = false,
@@ -132,6 +146,9 @@ local config = {
             value   = "Auto",
         },
         joinable_quest = {
+            enabled = false,
+        },
+        blocked_users = {
             enabled = false,
         },
     },
@@ -432,6 +449,10 @@ local function filter_reward_items(reward_table)
     return is_logical_or
 end
 
+local network_manager     = sdk.get_managed_singleton("app.NetworkManager")
+local context_manager     = network_manager:get_ContextManager()
+local player_platform_id  = context_manager:get_PlatformId()
+local block_list_service  = network_manager:get_BlockListService()
 local reward_util         = sdk.find_type_definition("app.ExQuestRewardUtil")
 local export_rewards      = reward_util:get_method("exportExRewardInfoToItemWorkList(app.cExEnemyRewardItemInfo)")
 local wishlist_util       = sdk.find_type_definition("app.WishlistUtil")
@@ -455,21 +476,22 @@ local function filter_sos_quest_list(quest_list)
             if not quest_data then break end
 
             local quest_level   = quest_data:get_QuestLv()
-            local monster_ids   = quest_data:get_TargetEmId() -- app.EnemyDef.ID[] get_TargetEmId()
+            local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
             local monster_count = monster_ids:get_size()
-            local session_data  = quest_data.Session
+            local session_data  = quest_data.Session               -- app.cGUIQuestViewData.cGUISessionData
             local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
 
             local filters = config.general_filters
             if filters.enabled then
                 conf = filters.quest_join_approval
                 if conf.enabled then
-                    if (is_auto_accept[conf.value] ~= search_result.isAutoAccept) then should_remove = true; break end
+                    if (is_auto_accept[conf.value] ~= session_data:get_isAutoAccept()) then should_remove = true; break end
                 end
 
                 conf = filters.quest_started_time
                 if conf.enabled then
-                    local started_at         = (search_result.startedAt > 0) and search_result.startedAt or search_result.acceptedAt
+                    local started_at         = session_data:get_StartTime()
+                    local started_at         = (started_at > 0) and started_at or session_data:get_AcceptedTime()
                     local started_difference = (os.time() - started_at) / 60
                     if (started_difference >= conf.value) then should_remove = true; break end
                 end
@@ -529,8 +551,7 @@ local function filter_sos_quest_list(quest_list)
 
                 conf = filters.host_hr
                 if conf.enabled then
-                    local host_info  = search_result:getHostHunterInfo()
-                    local host_hr    = host_info and host_info.hr or 1
+                    local host_hr    = session_data:get_HostHr()
                     local min, max   = conf.min, conf.max
                     local need_check = true
                     local threshold  = conf.threshold
@@ -554,7 +575,7 @@ local function filter_sos_quest_list(quest_list)
 
                 conf = filters.current_players
                 if conf.enabled then
-                    local current_players = search_result.memberNum
+                    local current_players = session_data:get_MemberNum()
                     local comparison      = conf.comparison or COMPARISON_TYPE_LIST[3]
                     local evaluator       = EVALUATORS[comparison]
                     if not evaluator or not evaluator(current_players, conf.value) then should_remove = true; break end
@@ -562,10 +583,23 @@ local function filter_sos_quest_list(quest_list)
 
                 conf = filters.max_players
                 if conf.enabled then
-                    local max_players = search_result.maxMemberNum
+                    local max_players = session_data:get_MemberMax()
                     local comparison  = conf.comparison or COMPARISON_TYPE_LIST[1]
                     local evaluator   = EVALUATORS[comparison]
                     if not evaluator or not evaluator(max_players, conf.value) then should_remove = true; break end
+                end
+
+                conf = filters.blocked_users  -- SOS 구조신호에선 테스트 못 했으나 로비 멤버 퀘스트에선 동작 확인했음
+                if conf.enabled then
+                    if not block_list_service then block_list_service = network_manager:get_BlockListService() end
+                    local user_ids = session_data:getQuestMembersUserId()
+                    local length   = user_ids:get_size()
+                    for j = 0, length - 1 do
+                        local user_id     = user_ids:get_Item(j)
+                        local guid_string = create_guid_string(user_id)
+                        local guid        = get_system_guid(guid_string)
+                        if guid and block_list_service:isBlock(guid) then should_remove = true; break end
+                    end
                 end
 
                 conf = filters.wishlist
@@ -660,8 +694,7 @@ local function filter_lobby_member_quest_list(quest_list)
             local quest_data = quest_list:get_Item(i)
             if not quest_data then break end
 
-            local session_data  = quest_data.Session
-            local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
+            local session_data = quest_data.Session  -- app.cGUIQuestViewData.cGUISessionData
 
             local conf = filters.without_password
             if conf.enabled then
@@ -670,14 +703,32 @@ local function filter_lobby_member_quest_list(quest_list)
 
             conf = filters.quest_join_approval
             if conf.enabled then
-                if (is_auto_accept[conf.value] ~= search_result.isAutoAccept) then should_remove = true; break end
+                if (is_auto_accept[conf.value] ~= session_data:get_isAutoAccept()) then should_remove = true; break end
             end
 
             conf = filters.joinable_quest
             if conf.enabled then
-                local available_slots = search_result.maxMemberNum - search_result.memberNum
-                local is_npc_only     = (search_result.multiplaySetting == NPC_ONLY)
-                if (available_slots == 0) or is_npc_only then should_remove = true; break end
+                local is_full = ((session_data:get_MemberMax() - session_data:get_MemberNum()) == 0)
+                if is_full then should_remove = true; break end
+                local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
+                if (search_result.multiplaySetting == NPC_ONLY) then should_remove = true; break end
+                if search_result.isSamePlatform then 
+                    local host_info = search_result:getHostHunterInfo()
+                    if (host_info.platformId ~= player_platform_id) then should_remove = true; break end
+                end                
+            end
+
+            conf = filters.blocked_users
+            if conf.enabled then  -- 같은 계정의 다른 캐릭터의 적용 여부는 확인하지 못 했음
+                if not block_list_service then block_list_service = network_manager:get_BlockListService() end
+                local user_ids = session_data:getQuestMembersUserId()
+                local length   = user_ids:get_size()
+                for j = 0, length - 1 do
+                    local user_id     = user_ids:get_Item(j)
+                    local guid_string = create_guid_string(user_id)
+                    local guid        = get_system_guid(guid_string)
+                    if guid and block_list_service:isBlock(guid) then should_remove = true; break end
+                end
             end
         until true
         if should_remove and not is_contains(quests_to_remove, i) then table.insert(quests_to_remove, i) end
@@ -1002,6 +1053,13 @@ local function draw_mod_settings()
         imgui.same_line()
         imgui.text("max players ")
         imgui.end_disabled()
+        -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
+        conf = filter.blocked_users
+        draw_settings_checkbox("filter_blocked_users", conf)
+        imgui.begin_disabled(not conf.enabled)
+        imgui.same_line()
+        imgui.text("Hide Quests with Blocked Users")
+        imgui.end_disabled()
         -- Started Time ---------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_started_time
         draw_settings_checkbox("filter_started_time", conf)
@@ -1209,6 +1267,13 @@ local function draw_mod_settings()
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with available slots")
+        imgui.end_disabled()
+        --- blocked users ----------------------------------------------------------------------------------------------------------------------------------------
+        conf = filter.blocked_users
+        draw_settings_checkbox("filter_lobby_member_quest_blocked_users", conf)
+        imgui.begin_disabled(not conf.enabled)
+        imgui.same_line()
+        imgui.text("Hide Quests with Blocked Users")
         imgui.end_disabled()
     end
     -- Mouse Cursor -------------------------------------------------------------------------------------------------------------------------------------------
