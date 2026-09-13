@@ -482,6 +482,7 @@ local filter_order = {
     "max_players",
     "quest_fields",
     "quest_environment",
+    "item_reward_custom",
 }
 
 local filter_methods = { -- return true if the quest should be filtered out (removed) from the list
@@ -492,7 +493,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     ["quest_started_time"] = function(quest_data, conf) 
         local session_data         = quest_data.Session
         local started_at           = session_data:get_StartTime()
-        local started_at           = (started_at > 0) and started_at or session_data:get_AcceptedTime()
+              started_at           = (started_at > 0) and started_at or session_data:get_AcceptedTime()
         local started_difference   = (os.time() - started_at) / 60
         return (started_difference >= conf.value)
     end,
@@ -631,7 +632,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         local session_data  = quest_data.Session
         return session_data:get_IsNeedPassword()
     end,
-    ["item_reward_custom"] = function(quest_data, conf)
+    ["item_reward_custom"] = function(quest_data)
         local reward_table     = {}
         local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
         local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
@@ -646,17 +647,19 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         end
         return filter_reward_items(reward_table)
     end,
-    ["item_reward_max_quantity"] = function(quest_list, conf)
+    ["item_reward_max_quantity"] = function(quest_list)
         if not quest_list then return end
 
         local quest_list_size = quest_list:get_Count()
         if quest_list_size == 0 then return end 
 
+        local target_item  = config.item_filters.max_quantity.target_item
         local max_quantity = 0
         for i = (quest_list_size - 1), 0, -1 do
-            local quest_data = quest_list:get_Item(i)
-            if not quest_data then break end
             repeat
+                local quest_data = quest_list:get_Item(i)
+                if not quest_data then break end
+
                 local reward_table     = {}
                 local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
                 local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
@@ -664,11 +667,12 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
                     local item_work = item_work_list:get_Item(item_i)
                     local item_id   = tostring(item_work:get_ItemId())
                     local item_num  = item_work.Num or 0
+
                     if is_contains(GEM_ID_LIST, item_id) then item_id = "GEM" end
                     reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
                 end
 
-                local item_num = reward_table[conf.target_item] or 0
+                local item_num = reward_table[target_item] or 0
                 if     (item_num < max_quantity) then quest_list:RemoveAt(i)  break 
                 elseif (item_num > max_quantity) then max_quantity = item_num end 
             until true
@@ -684,7 +688,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
                 local total_quantity   = 0
                 for index = 0, item_work_list._size - 1 do
                     local item_work = item_work_list:get_Item(index)
-                    if (conf.target_item == tostring(item_work:get_ItemId())) then total_quantity = total_quantity + item_work.Num end
+                    if (target_item == tostring(item_work:get_ItemId())) then total_quantity = total_quantity + item_work.Num end
                 end
                 if (total_quantity < max_quantity) then quest_list:RemoveAt(i) end
             end
@@ -701,21 +705,12 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
     local quest_list_size = quest_list:get_Count()
     if quest_list_size <= 0 then return end
 
-    local filters, is_reward_custom, custom_filters, item_filter_method = nil, nil, nil, nil
+    local filters, reward_filters, is_reward_max_quantity = nil, nil, nil
     if (category == RECRUITMENT_LOBBY) then filters = config.lobby_member_quest_filters 
     else
-        filters = config.general_filters
-        if config.item_filters.enabled then 
-            if (config.item_filters.mode == "Custom") then
-                is_reward_custom   = true
-                item_filters       = config.item_filters.custom
-                item_filter_method = filter_methods["item_reward_custom"]
-            else
-                is_reward_custom   = false
-                item_filters       = config.item_filters.max_quantity
-                item_filter_method = filter_methods["item_reward_max_quantity"]
-            end
-        end
+        filters        = config.general_filters
+        reward_filters = config.item_filters
+        if reward_filters.enabled then is_reward_max_quantity = (reward_filters.mode == "Max Quantity") end
     end
 
     for i = quest_list_size - 1, 0, -1 do
@@ -723,19 +718,18 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
         if quest_data then
             local should_remove = false
             for _, filter_name in ipairs(filter_order) do
-                local filter_config = filters[filter_name]
+                local filter_config = filters[filter_name] or ((filter_name == "item_reward_custom") and reward_filters)
                 if filter_config and filter_config.enabled then
                     local filter_method = filter_methods[filter_name]
                     if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
                 end
-                if is_reward_custom and item_filter_method(quest_data, item_filters) then should_remove = true; break end
             end
             if should_remove then quest_list:RemoveAt(i) end
         end
     end
 
-    if (is_reward_custom ~= false) then return end
-    item_filter_method(quest_list, item_filters)
+    if not is_reward_max_quantity then return end
+    filter_methods["item_reward_max_quantity"](quest_list)
 return sdk.PreHookResult.CALL_ORIGINAL end)
 
 local function draw_settings_checkbox(setting_name, conf)
