@@ -270,10 +270,10 @@ function ENEMY_BOSS.update()
             if not field:is_static() then break end
             local id = field:get_data()
             if not get_is_em_valid:call(nil, id) or not get_is_em_boss:call(nil, id) then break end
-            local specics_fixed = get_em_species_fixed:call(nil, id)
-            if (specics_fixed == ENEMY_BOSS.INVALID_SPECIES) then break end
+            local species_fixed = get_em_species_fixed:call(nil, id)
+            if (species_fixed == ENEMY_BOSS.INVALID_SPECIES) then break end
 
-            local specics_data  = get_em_species_data:call(nil, specics_fixed - 1)
+            local specics_data  = get_em_species_data:call(nil, species_fixed - 1)
             local guid_specics  = specics_data:get_EmSpeciesName()
             local guid_name     = get_em_name:call(nil, id)
             local name          = convert_guid_to_text:call(nil, guid_name, 0)
@@ -283,7 +283,7 @@ function ENEMY_BOSS.update()
             id                                    = tostring(id)
             ENEMY_BOSS.NAME_MAP[name]             = id
             ENEMY_BOSS.ID_MAP[id]                 = name
-            ENEMY_BOSS.SPECIES_MAP[specics_fixed] = specics_type
+            ENEMY_BOSS.SPECIES_MAP[species_fixed] = specics_type
             table.insert(ENEMY_BOSS.NAME_LIST, name)
             if (conf_name_list[id] == nil) then conf_name_list[id] = false end
         until true
@@ -441,8 +441,7 @@ local function initialize()
 end initialize()
 sdk.hook(sdk.find_type_definition("app.GUI020001"):get_method(".ctor()"), function(args) initialize() end) 
 
-local function filter_reward_items(reward_table)
-    local conf          = config.item_filters.custom
+local function filter_reward_items(reward_table, conf)
     local is_logical_or = (conf.operator == "OR")
     for item_id, min_required in pairs(conf.target_list) do
         if min_required then
@@ -632,7 +631,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         local session_data  = quest_data.Session
         return session_data:get_IsNeedPassword()
     end,
-    ["item_reward_custom"] = function(quest_data)
+    ["item_reward_custom"] = function(quest_data, conf)
         local reward_table     = {}
         local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
         local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
@@ -645,7 +644,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
             if is_contains(GEM_ID_LIST, item_id) then item_id                  = "GEM"                                                                   end
             reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
         end
-        return filter_reward_items(reward_table)
+        return filter_reward_items(reward_table, conf.custom)
     end,
     ["item_reward_max_quantity"] = function(quest_list)
         if not quest_list then return end
