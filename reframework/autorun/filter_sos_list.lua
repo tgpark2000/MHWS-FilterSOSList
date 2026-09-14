@@ -699,7 +699,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
     if not ((category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY)) then return end
     local quest_list      = quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")
     local quest_list_size = quest_list:get_Count()
-    if quest_list_size <= 0 then return end
+    if (quest_list_size <= 0) then return end
 
     local conf_list, reward_conf, is_reward_max_quantity = nil, nil, nil
     if (category == RECRUITMENT_LOBBY) then conf_list = config.lobby_member_quest_filters 
