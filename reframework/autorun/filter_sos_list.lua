@@ -441,18 +441,6 @@ local function initialize()
 end initialize()
 sdk.hook(sdk.find_type_definition("app.GUI020001"):get_method(".ctor()"), function(args) initialize() end) 
 
-local function filter_reward_items(reward_table, conf)
-    local is_logical_or = (conf.operator == "OR")
-    for item_id, min_required in pairs(conf.target_list) do
-        if min_required then
-            local amount = reward_table[item_id] or 0
-            if (amount >= min_required) then if     is_logical_or then return false end 
-            else                             if not is_logical_or then return true  end end
-        end
-    end
-    return is_logical_or
-end
-
 local network_manager     = sdk.get_managed_singleton("app.NetworkManager")
 local context_manager     = network_manager:get_ContextManager()
 local player_platform_id  = context_manager:get_PlatformId()
@@ -644,15 +632,24 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
             if is_contains(GEM_ID_LIST, item_id) then item_id                  = "GEM"                                                                   end
             reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
         end
-        return filter_reward_items(reward_table, conf.custom)
+
+        local is_logical_or = (conf.custom.operator == "OR")
+        local target_list   = conf.custom.target_list
+        for item_id, min_required in pairs(target_list) do
+            if min_required then
+                local amount = reward_table[item_id] or 0
+                if (amount >= min_required) then if     is_logical_or then return false end 
+                else                             if not is_logical_or then return true  end end
+            end
+        end
+        return is_logical_or
     end,
-    ["item_reward_max_quantity"] = function(quest_list)
+    ["item_reward_max_quantity"] = function(quest_list, target_item)
         if not quest_list then return end
 
         local quest_list_size = quest_list:get_Count()
         if quest_list_size == 0 then return end 
 
-        local target_item  = config.item_filters.max_quantity.target_item
         local max_quantity = 0
         for i = (quest_list_size - 1), 0, -1 do
             repeat
@@ -694,7 +691,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         end
     end,
 }
-    
+
 sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sortQuestDataList(System.Boolean)"), function(args)
     if not config.enabled then return end
     local quest_list_parts = sdk.to_managed_object(args[2])
@@ -704,12 +701,12 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
     local quest_list_size = quest_list:get_Count()
     if quest_list_size <= 0 then return end
 
-    local filters, reward_filters, is_reward_max_quantity = nil, nil, nil
-    if (category == RECRUITMENT_LOBBY) then filters = config.lobby_member_quest_filters 
+    local conf_list, reward_conf, is_reward_max_quantity = nil, nil, nil
+    if (category == RECRUITMENT_LOBBY) then conf_list = config.lobby_member_quest_filters 
     else
-        filters        = config.general_filters
-        reward_filters = config.item_filters
-        if reward_filters.enabled then is_reward_max_quantity = (reward_filters.mode == "Max Quantity") end
+        conf_list   = config.general_filters
+        reward_conf = config.item_filters
+        if reward_conf.enabled then is_reward_max_quantity = (reward_conf.mode == "Max Quantity") end
     end
 
     for i = quest_list_size - 1, 0, -1 do
@@ -717,7 +714,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
         if quest_data then
             local should_remove = false
             for _, filter_name in ipairs(filter_order) do
-                local filter_config = filters[filter_name] or ((filter_name == "item_reward_custom") and reward_filters)
+                local filter_config = conf_list[filter_name] or (((filter_name == "item_reward_custom") and (not is_reward_max_quantity)) and reward_conf)
                 if filter_config and filter_config.enabled then
                     local filter_method = filter_methods[filter_name]
                     if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
@@ -728,7 +725,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
     end
 
     if not is_reward_max_quantity then return end
-    filter_methods["item_reward_max_quantity"](quest_list)
+    filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
 return sdk.PreHookResult.CALL_ORIGINAL end)
 
 local function draw_settings_checkbox(setting_name, conf)
