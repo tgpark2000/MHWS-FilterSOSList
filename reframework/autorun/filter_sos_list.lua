@@ -882,7 +882,7 @@ local function draw_mod_settings()
     else                       imgui.text_colored("Enabled",  -16711936)
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_join_approval
-        draw_settings_checkbox("filter_accept_setting", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_accept_setting", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with")
@@ -897,7 +897,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Quest Level ----------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_level
-        draw_settings_checkbox("filter_quest_level", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_quest_level", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests " .. ((conf.comparison == "exactly") and "at" or "with"))
@@ -910,13 +910,12 @@ local function draw_mod_settings()
         imgui.end_disabled() 
         -- Host hunter Rank -----------------------------------------------------------------------------------------------------------------------------------
         conf = filter.host_hr
-        draw_settings_checkbox("filter_host_hr", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_host_hr", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with host HR limits")
         if conf.enabled then 
-            imgui.text(" \u{2515}")
-            imgui.same_line(); draw_settings_checkbox("filter_host_hr_threshold", conf.threshold)
+            imgui.indent(20); draw_settings_checkbox("filter_host_hr_threshold", conf.threshold); imgui.unindent(20)
             imgui.same_line(); imgui.text("Apply only if quest level is" .. ((conf.threshold.comparison == "exactly") and " at" or ""))
             imgui.same_line(); draw_settings_comparison("host_hr_threshold_comparison", conf.threshold)
             imgui.same_line(); draw_settings_text_input("host_hr_threshold_level_filter", conf.threshold, 1, 10, 8)
@@ -925,7 +924,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Monster Name ---------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.monster_name
-        draw_settings_checkbox("monster_name", conf)
+        imgui.indent(10); draw_settings_checkbox("monster_name", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests matching base name")
@@ -968,7 +967,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Monster Species ------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.monster_species
-        draw_settings_checkbox("filter_monster_species", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_monster_species", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line() 
         imgui.text("Show only quests with")
@@ -982,7 +981,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Monster Threat -------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.monster_threat
-        draw_settings_checkbox("filter_monster_threat", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_monster_threat", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests " .. ((conf.comparison == "exactly") and "at" or "with"))
@@ -995,7 +994,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Monster Count --------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.monster_count
-        draw_settings_checkbox("monster_count", conf)
+        imgui.indent(10); draw_settings_checkbox("monster_count", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with")
@@ -1008,7 +1007,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Current Player Count -------------------------------------------------------------------------------------------------------------------------------
         conf = filter.current_players
-        draw_settings_checkbox("filter_current_players", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_current_players", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with")
@@ -1021,7 +1020,7 @@ local function draw_mod_settings()
         imgui.end_disabled() 
         -- Max Player Count -----------------------------------------------------------------------------------------------------------------------------------
         conf = filter.max_players
-        draw_settings_checkbox("filter_max_players", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_max_players", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line() 
         imgui.text("Show only quests with")
@@ -1034,14 +1033,14 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.blocked_users
-        draw_settings_checkbox("filter_blocked_users", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_blocked_users", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Hide Quests with Blocked Users")
         imgui.end_disabled()
         -- Started Time ---------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_started_time
-        draw_settings_checkbox("filter_started_time", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_started_time", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests started within the last")
@@ -1052,7 +1051,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Multiplay Setting ----------------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_multiplay_setting
-        draw_settings_checkbox("filter_multiplay_setting", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_multiplay_setting", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests that allow")
@@ -1065,7 +1064,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Quest Field Setting --------------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_fields
-        draw_settings_checkbox("filter_field", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_field", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests in")
@@ -1093,7 +1092,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Environment Setting --------------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_environment
-        draw_settings_checkbox("filter_environment", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_environment", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests in")
@@ -1121,7 +1120,7 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Wishlist Monster -----------------------------------------------------------------------------------------------------------------------------------
         conf = filter.wishlist
-        draw_settings_checkbox("filter_wishlist", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_wishlist", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with wishlisted monster drops ")
@@ -1136,6 +1135,7 @@ local function draw_mod_settings()
 
     if not conf.enabled then imgui.text_colored("Disabled", -16776961)
     else                     imgui.text_colored("Enabled",  -16711936)
+        imgui.indent(10)
         imgui.text("Filter Mode:")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.filter_modes)
@@ -1208,6 +1208,7 @@ local function draw_mod_settings()
             if new_index then conf.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
             imgui.pop_item_width()
         end
+        imgui.unindent(10)
     end
     -- Lobby Member Quest Filters -----------------------------------------------------------------------------------------------------------------------------
     filter = config.lobby_member_quest_filters
@@ -1220,14 +1221,14 @@ local function draw_mod_settings()
     else                       imgui.text_colored("Enabled",  -16711936)
         -- without a password ---------------------------------------------------------------------------------------------------------------------------------
         conf = filter.without_password
-        draw_settings_checkbox("filter_lobby_member_quest_without_password", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests without a password")
         imgui.end_disabled()
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         conf = filter.quest_join_approval
-        draw_settings_checkbox("filter_lobby_member_quest_accept_setting", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_accept_setting", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with ")
@@ -1242,14 +1243,14 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- available slots ----------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.joinable_quest
-        draw_settings_checkbox("filter_lobby_member_quest_joinable_quest", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_joinable_quest", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Show only quests with available slots")
         imgui.end_disabled()
         --- blocked users ----------------------------------------------------------------------------------------------------------------------------------------
         conf = filter.blocked_users
-        draw_settings_checkbox("filter_lobby_member_quest_blocked_users", conf)
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_blocked_users", conf); imgui.unindent(10)
         imgui.begin_disabled(not conf.enabled)
         imgui.same_line()
         imgui.text("Hide Quests with Blocked Users")
