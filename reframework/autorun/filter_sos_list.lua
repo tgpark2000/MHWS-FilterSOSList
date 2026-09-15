@@ -185,9 +185,9 @@ local GEM_ID_LIST <const>            = { "36", "91", "333", "350", "387", "423",
 local COMPARISON_TYPE_LIST <const>   = {  "at least",       "at most",       "exactly" }
 local COMPARISON_TYPE_LOOKUP <const> = { ["at least"] = 1, ["at most"] = 2, ["exactly"] = 3 }
 local EVALUATORS <const>             = {
-    ["at least"] = function(a, b) return (a >= b) end,
-    ["at most"]  = function(a, b) return (a <= b) end,
-    ["exactly"]  = function(a, b) return (a == b) end,
+    ["at least"] = function(current, required) return (current >= required) end,
+    ["at most"]  = function(current, required) return (current <= required) end,
+    ["exactly"]  = function(current, required) return (current == required) end,
 }
 
 local MULTIPLAY_TYPE_LIST <const>   = {  "Players & NPCs",       "Players" }
@@ -476,35 +476,35 @@ local filter_order = {
 }
 
 local filter_methods = { -- return true if the quest should be filtered out (removed) from the list
-    ["quest_join_approval"] = function(quest_data, conf) 
+    ["quest_join_approval"] = function(quest_data, filter) 
         local session_data = quest_data.Session  -- app.cGUIQuestViewData.cGUISessionData
-        return (is_auto_accept[conf.value] ~= session_data:get_isAutoAccept())
+        return (is_auto_accept[filter.value] ~= session_data:get_isAutoAccept())
     end,
-    ["quest_started_time"] = function(quest_data, conf) 
+    ["quest_started_time"] = function(quest_data, filter) 
         local session_data         = quest_data.Session
         local started_at           = session_data:get_StartTime()
               started_at           = (started_at > 0) and started_at or session_data:get_AcceptedTime()
         local started_difference   = (os.time() - started_at) / 60
-        return (started_difference >= conf.value)
+        return (started_difference >= filter.value)
     end,
-    ["quest_multiplay_setting"] = function(quest_data, conf) 
+    ["quest_multiplay_setting"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
-        return (search_result.multiplaySetting ~= (MULTIPLAY_TYPE_LOOKUP[conf.value] - 1))
+        return (search_result.multiplaySetting ~= (MULTIPLAY_TYPE_LOOKUP[filter.value] - 1))
     end,
-    ["quest_fields"] = function(quest_data, conf) 
+    ["quest_fields"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()
         local field         = FIELD_ID_MAP[search_result.fieldId]
-        return not conf.list[field]
+        return not filter.list[field]
     end,
-    ["quest_environment"] = function(quest_data, conf) 
+    ["quest_environment"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()
         local environment   = ENVIRONMENT_ID_MAP[search_result.envType]
-        return not conf.list[environment]
+        return not filter.list[environment]
     end,
-    ["blocked_users"] = function(quest_data, conf) 
+    ["blocked_users"] = function(quest_data, filter) 
         local session_data = quest_data.Session
         local user_ids     = session_data:getQuestMembersUserId()
         local length       = user_ids:get_size()
@@ -516,7 +516,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         end
         return false
     end,
-    ["wishlist"] = function(quest_data, conf) 
+    ["wishlist"] = function(quest_data, filter) 
         local is_quest_wishlisted = false
         local session_data        = quest_data.Session
         local search_result       = session_data:get_SearchResult()
@@ -536,45 +536,45 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         end
         return not is_quest_wishlisted
     end,
-    ["monster_name"] = function(quest_data, conf) 
+    ["monster_name"] = function(quest_data, filter) 
         local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
         local monster_count = monster_ids:get_size()
         for k = 0, monster_count - 1 do 
             local em_id = monster_ids:get_Item(k)
-            if conf.list[tostring(em_id)] then return false end
+            if filter.list[tostring(em_id)] then return false end
         end
         return true
     end,
-    ["monster_count"] = function(quest_data, conf) 
+    ["monster_count"] = function(quest_data, filter) 
         local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
         local monster_count = monster_ids:get_size()
-        local comparison    = conf.comparison or COMPARISON_TYPE_LIST[1]
+        local comparison    = filter.comparison or COMPARISON_TYPE_LIST[1]
         local evaluator     = EVALUATORS[comparison]
-        return not (evaluator and evaluator(monster_count, conf.value))
+        return not (evaluator and evaluator(monster_count, filter.value))
     end,
-    ["monster_threat"] = function(quest_data, conf) 
+    ["monster_threat"] = function(quest_data, filter) 
         local monster_difficulties       = quest_data:getTragetEmDifficulityRank()  -- 게임 API 자체 오타였다
         local monster_difficulties_count = monster_difficulties:get_size()
-        local comparison                 = conf.comparison or COMPARISON_TYPE_LIST[1]
+        local comparison                 = filter.comparison or COMPARISON_TYPE_LIST[1]
         local evaluator                  = EVALUATORS[comparison]
         for diff_index = 0, monster_difficulties_count - 1 do
             local monster_difficulty = monster_difficulties:get_Item(diff_index)
-            if evaluator and evaluator(monster_difficulty, conf.value) then return false end
+            if evaluator and evaluator(monster_difficulty, filter.value) then return false end
         end
         return true
     end,
-    ["quest_level"] = function(quest_data, conf) 
+    ["quest_level"] = function(quest_data, filter) 
         local quest_level = quest_data:get_QuestLv()
-        local comparison  = conf.comparison or COMPARISON_TYPE_LIST[1]
+        local comparison  = filter.comparison or COMPARISON_TYPE_LIST[1]
         local evaluator   = EVALUATORS[comparison]
-        return not (evaluator and evaluator(quest_level, conf.value))
+        return not (evaluator and evaluator(quest_level, filter.value))
     end,
-    ["host_hr"] = function(quest_data, conf) 
+    ["host_hr"] = function(quest_data, filter) 
         local session_data = quest_data.Session
         local host_hr      = session_data:get_HostHr()
-        local min, max     = conf.min, conf.max
+        local min, max     = filter.min, filter.max
         local need_check   = true
-        local threshold    = conf.threshold
+        local threshold    = filter.threshold
         if threshold.enabled then
             local comparison = threshold.comparison or COMPARISON_TYPE_LIST[1]
             local evaluator  = EVALUATORS[comparison]
@@ -582,31 +582,31 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         end
         return need_check and ((host_hr <= min) or (host_hr >= max))
     end,
-    ["monster_species"] = function(quest_data, conf) 
+    ["monster_species"] = function(quest_data, filter) 
         local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
         local monster_count = monster_ids:get_size()
         for k = 0, monster_count - 1 do 
             local species_fixed = get_em_species_fixed:call(nil, monster_ids:get_Item(k))
-            if (species_fixed == conf.value) then return false end
+            if (species_fixed == filter.value) then return false end
         end
         return true
     end,
-    ["current_players"] = function(quest_data, conf) 
+    ["current_players"] = function(quest_data, filter) 
         local session_data   = quest_data.Session
         local current_players = session_data:get_MemberNum()
-        local comparison      = conf.comparison or COMPARISON_TYPE_LIST[3]
+        local comparison      = filter.comparison or COMPARISON_TYPE_LIST[3]
         local evaluator       = EVALUATORS[comparison]
-        return not (evaluator and evaluator(current_players, conf.value))
+        return not (evaluator and evaluator(current_players, filter.value))
     end,
-    ["max_players"] = function(quest_data, conf) 
+    ["max_players"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()
         local max_players   = search_result.maxMemberNum
-        local comparison    = conf.comparison or COMPARISON_TYPE_LIST[2]
+        local comparison    = filter.comparison or COMPARISON_TYPE_LIST[2]
         local evaluator     = EVALUATORS[comparison]
-        return not (evaluator and evaluator(max_players, conf.value))
+        return not (evaluator and evaluator(max_players, filter.value))
     end,
-    ["joinable_quest"] = function(quest_data, conf) 
+    ["joinable_quest"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local is_full = ((session_data:get_MemberMax() - session_data:get_MemberNum()) == 0)
         if is_full then return true end
@@ -618,11 +618,11 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         end
         return false
     end,
-    ["without_password"] = function(quest_data, conf) 
+    ["without_password"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         return session_data:get_IsNeedPassword()
     end,
-    ["item_reward_custom"] = function(quest_data, conf)
+    ["item_reward_custom"] = function(quest_data, filter)
         local reward_table     = {}
         local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
         local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
@@ -636,8 +636,8 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
             reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
         end
 
-        local is_logical_or = (conf.custom.operator == "OR")
-        local target_list   = conf.custom.target_list
+        local is_logical_or = (filter.custom.operator == "OR")
+        local target_list   = filter.custom.target_list
         for item_id, min_required in pairs(target_list) do
             if min_required then
                 local amount = reward_table[item_id] or 0
@@ -695,36 +695,36 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     end,
 }
 
-local function draw_settings_checkbox(setting_name, conf)
-    local changed, value = imgui.checkbox("##filter_sos_list_" .. setting_name, conf.enabled or false)
-    if changed then conf.enabled = value end
+local function draw_settings_checkbox(setting_name, filter)
+    local changed, value = imgui.checkbox("##filter_sos_list_" .. setting_name, filter.enabled or false)
+    if changed then filter.enabled = value end
     return value
 end
 
-local function draw_settings_text_input(setting_name, conf, min, max, default)
+local function draw_settings_text_input(setting_name, filter, min, max, default)
     local width = imgui.calc_text_size(tostring(max)).x + 10
     imgui.push_item_width(width)
-    local changed, value = imgui.input_text("##filter_sos_list_" .. setting_name, conf.value, default)
+    local changed, value = imgui.input_text("##filter_sos_list_" .. setting_name, filter.value, default)
     local value = tonumber(value) or default
-    if changed and (value >= min) and (value <= max) then conf.value = value end
+    if changed and (value >= min) and (value <= max) then filter.value = value end
     imgui.pop_item_width()
     return value
 end
 
-local function draw_settings_comparison(setting_name, conf)
+local function draw_settings_comparison(setting_name, filter)
     imgui.push_item_width(UI_WIDTH.comparison_types)
-    local          current_index    = COMPARISON_TYPE_LOOKUP[conf.comparison] or 1
+    local          current_index    = COMPARISON_TYPE_LOOKUP[filter.comparison] or 1
     local changed, selected_index   = imgui.combo("##filter_sos_list_" .. setting_name, current_index, COMPARISON_TYPE_LIST)
-    if changed then conf.comparison = COMPARISON_TYPE_LIST[selected_index] end
+    if changed then filter.comparison = COMPARISON_TYPE_LIST[selected_index] end
     imgui.pop_item_width()
 end
 
-local function draw_settings_menu(setting_name, conf, menus, selected_index, is_allow_multi_checked)
+local function draw_settings_menu(setting_name, filter, menus, selected_index, is_allow_multi_checked)
     if not imgui.begin_menu(setting_name .. "##menus" .. #menus, true) then return end
     local new_index = nil
     for i, name in ipairs(menus) do
-        local is_checked = is_allow_multi_checked and (conf.list[name] == true) or (i == selected_index)
-        if imgui.menu_item(get_localized_text(name), nil, is_checked, conf.enabled) then new_index = i end
+        local is_checked = is_allow_multi_checked and (filter.list[name] == true) or (i == selected_index)
+        if imgui.menu_item(get_localized_text(name), nil, is_checked, filter.enabled) then new_index = i end
     end
     cursor_helper.draw_custom_cursor(config.cursor_scale)
     imgui.end_menu()
@@ -844,61 +844,61 @@ local function draw_mod_settings()
     imgui.text("구조신호 퀘스트: 퀘스트 보일 때까지 계속 검색하기")
     imgui.end_disabled()
     -- General SOS Filters ------------------------------------------------------------------------------------------------------------------------------------
-    local filter = config.general_filters
-    local conf
+    local filters = config.general_filters
+    local filter
     imgui.separator()
-    draw_settings_checkbox("general_filters", filter)
+    draw_settings_checkbox("general_filters", filters)
     imgui.same_line()
     imgui.text("General SOS Filters")
     imgui.same_line()
-    if not filter.enabled then imgui.text_colored("Disabled", -16776961)
-    else                       imgui.text_colored("Enabled",  -16711936)
+    if not filters.enabled then imgui.text_colored("Disabled", -16776961)
+    else                        imgui.text_colored("Enabled",  -16711936)
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_join_approval
-        imgui.indent(10); draw_settings_checkbox("filter_accept_setting", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_join_approval
+        imgui.indent(10); draw_settings_checkbox("filter_accept_setting", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.accept_modes)
-        local accept_option_index = ACCEPT_MODE_LOOKUP[conf.value] or 1
+        local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
         local changed, new_index  = imgui.combo("##filter_sos_list_accept_setting", accept_option_index, ACCEPT_MODE_LIST)
-        if changed then conf.value = ACCEPT_MODE_LIST[new_index] end
+        if changed then filter.value = ACCEPT_MODE_LIST[new_index] end
         imgui.pop_item_width()
         imgui.same_line()
         imgui.text("join approval ")
         imgui.end_disabled()
         -- Quest Level ----------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_level
-        imgui.indent(10); draw_settings_checkbox("filter_quest_level", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_level
+        imgui.indent(10); draw_settings_checkbox("filter_quest_level", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests " .. ((conf.comparison == "exactly") and "at" or "with"))
+        imgui.text("Show only quests " .. ((filter.comparison == "exactly") and "at" or "with"))
         imgui.same_line()
-        draw_settings_comparison("quest_level_comparison", conf)
+        draw_settings_comparison("quest_level_comparison", filter)
         imgui.same_line()
-        draw_settings_text_input("quest_level_filter", conf, 1, 10, 8)
+        draw_settings_text_input("quest_level_filter", filter, 1, 10, 8)
         imgui.same_line()
         imgui.text("quest level ")
         imgui.end_disabled() 
         -- Host hunter Rank -----------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.host_hr
-        imgui.indent(10); draw_settings_checkbox("filter_host_hr", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.host_hr
+        imgui.indent(10); draw_settings_checkbox("filter_host_hr", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with host HR limits")
-        if conf.enabled then 
-            imgui.indent(20); draw_settings_checkbox("filter_host_hr_threshold", conf.threshold); imgui.unindent(20)
-            imgui.same_line(); imgui.text("Apply only if quest level is" .. ((conf.threshold.comparison == "exactly") and " at" or ""))
-            imgui.same_line(); draw_settings_comparison("host_hr_threshold_comparison", conf.threshold)
-            imgui.same_line(); draw_settings_text_input("host_hr_threshold_level_filter", conf.threshold, 1, 10, 8)
+        if filter.enabled then 
+            imgui.indent(20); draw_settings_checkbox("filter_host_hr_threshold", filter.threshold); imgui.unindent(20)
+            imgui.same_line(); imgui.text("Apply only if quest level is" .. ((filter.threshold.comparison == "exactly") and " at" or ""))
+            imgui.same_line(); draw_settings_comparison("host_hr_threshold_comparison", filter.threshold)
+            imgui.same_line(); draw_settings_text_input("host_hr_threshold_level_filter", filter.threshold, 1, 10, 8)
         end
-        conf.min, conf.max = draw_slider_range_int("HR", conf.min, conf.max)
+        filter.min, filter.max = draw_slider_range_int("HR", filter.min, filter.max)
         imgui.end_disabled()
         -- Monster Name ---------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.monster_name
-        imgui.indent(10); draw_settings_checkbox("monster_name", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.monster_name
+        imgui.indent(10); draw_settings_checkbox("monster_name", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests matching base name")
         imgui.indent(30)
@@ -906,7 +906,7 @@ local function draw_mod_settings()
         local remaining_count = nil
         for _, name in ipairs(ENEMY_BOSS.NAME_LIST) do
             local id         = ENEMY_BOSS.NAME_MAP[name]
-            local is_checked = conf.list[id] and (conf.list[id] == true)
+            local is_checked = filter.list[id] and (filter.list[id] == true)
             if is_checked then
                 local current_monster_name = ENEMY_BOSS.ID_MAP[id]
                 if not remaining_count then
@@ -921,16 +921,16 @@ local function draw_mod_settings()
         if     remaining_count                              then boss_names_str = boss_names_str .. " and +" .. tostring(remaining_count) .. " more"
         elseif not boss_names_str or (boss_names_str == "") then boss_names_str = "  <No Monster Name Selected>  "                                   end
         if remaining_count then
-            if imgui.button("Reset", { 50, 24 }) then conf.list = {} end
+            if imgui.button("Reset", { 50, 24 }) then filter.list = {} end
             imgui.same_line()
         end
         imgui.set_next_item_width(280)
         if imgui.begin_menu(boss_names_str .. "##menuName", true) then
             for _, name in ipairs(ENEMY_BOSS.NAME_LIST) do
                 local id         = ENEMY_BOSS.NAME_MAP[name]
-                local is_checked = conf.list[id] and (conf.list[id] == true)
-                if imgui.menu_item(name, nil, is_checked, conf.enabled) then 
-                    conf.list[id] = not is_checked 
+                local is_checked = filter.list[id] and (filter.list[id] == true)
+                if imgui.menu_item(name, nil, is_checked, filter.enabled) then 
+                    filter.list[id] = not is_checked 
                 end
             end
             cursor_helper.draw_custom_cursor(config.cursor_scale)
@@ -939,113 +939,113 @@ local function draw_mod_settings()
         imgui.unindent(30)
         imgui.end_disabled()
         -- Monster Species ------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.monster_species
-        imgui.indent(10); draw_settings_checkbox("filter_monster_species", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.monster_species
+        imgui.indent(10); draw_settings_checkbox("filter_monster_species", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line() 
         imgui.text("Show only quests with")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.enemy_species)
-        local changed, new_index = imgui.combo("##filter_monster_species", conf.value, ENEMY_BOSS.SPECIES_MAP)
-        if changed then conf.value = new_index end
+        local changed, new_index = imgui.combo("##filter_monster_species", filter.value, ENEMY_BOSS.SPECIES_MAP)
+        if changed then filter.value = new_index end
         imgui.pop_item_width()
         imgui.same_line()
         imgui.text("targets ")
         imgui.end_disabled()
         -- Monster Threat -------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.monster_threat
-        imgui.indent(10); draw_settings_checkbox("filter_monster_threat", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.monster_threat
+        imgui.indent(10); draw_settings_checkbox("filter_monster_threat", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests " .. ((conf.comparison == "exactly") and "at" or "with"))
+        imgui.text("Show only quests " .. ((filter.comparison == "exactly") and "at" or "with"))
         imgui.same_line()
-        draw_settings_comparison("monster_threat_comparison", conf)
+        draw_settings_comparison("monster_threat_comparison", filter)
         imgui.same_line()
-        draw_settings_text_input("monster_threat_filter", conf, 1, 5, 3)
+        draw_settings_text_input("monster_threat_filter", filter, 1, 5, 3)
         imgui.same_line()
         imgui.text("threat level ")
         imgui.end_disabled()
         -- Monster Count --------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.monster_count
-        imgui.indent(10); draw_settings_checkbox("monster_count", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.monster_count
+        imgui.indent(10); draw_settings_checkbox("monster_count", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with")
         imgui.same_line()
-        draw_settings_comparison("monster_count_comparison", conf)
+        draw_settings_comparison("monster_count_comparison", filter)
         imgui.same_line()
-        local value = draw_settings_text_input("monster_count_filter", conf, 1, 4, 1)
+        local value = draw_settings_text_input("monster_count_filter", filter, 1, 4, 1)
         imgui.same_line()
         imgui.text((tonumber(value) == 1) and "monster " or "monsters ")
         imgui.end_disabled()
         -- Current Player Count -------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.current_players
-        imgui.indent(10); draw_settings_checkbox("filter_current_players", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.current_players
+        imgui.indent(10); draw_settings_checkbox("filter_current_players", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with")
         imgui.same_line()
-        draw_settings_comparison("current_players_comparison", conf)
+        draw_settings_comparison("current_players_comparison", filter)
         imgui.same_line()
-        local value = draw_settings_text_input("current_players_filter", conf, 1, 3, 1)
+        local value = draw_settings_text_input("current_players_filter", filter, 1, 3, 1)
         imgui.same_line()
         imgui.text((tonumber(value) == 1) and "current player " or "current players ")
         imgui.end_disabled() 
         -- Max Player Count -----------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.max_players
-        imgui.indent(10); draw_settings_checkbox("filter_max_players", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.max_players
+        imgui.indent(10); draw_settings_checkbox("filter_max_players", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line() 
         imgui.text("Show only quests with")
         imgui.same_line()
-        draw_settings_comparison("max_players_comparison", conf)
+        draw_settings_comparison("max_players_comparison", filter)
         imgui.same_line()
-        draw_settings_text_input("max_players_filter", conf, 2, 4, 2)
+        draw_settings_text_input("max_players_filter", filter, 2, 4, 2)
         imgui.same_line()
         imgui.text("max players ")
         imgui.end_disabled()
         -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.blocked_users
-        imgui.indent(10); draw_settings_checkbox("filter_blocked_users", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.blocked_users
+        imgui.indent(10); draw_settings_checkbox("filter_blocked_users", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Hide Quests with Blocked Users")
         imgui.end_disabled()
         -- Started Time ---------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_started_time
-        imgui.indent(10); draw_settings_checkbox("filter_started_time", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_started_time
+        imgui.indent(10); draw_settings_checkbox("filter_started_time", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests started within the last")
         imgui.same_line()
-        local value = draw_settings_text_input("started_time_filter", conf, 1, 60, 1)
+        local value = draw_settings_text_input("started_time_filter", filter, 1, 60, 1)
         imgui.same_line()
         imgui.text((tonumber(value) == 1) and "minute " or "minutes ")
         imgui.end_disabled()
         -- Multiplay Setting ----------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_multiplay_setting
-        imgui.indent(10); draw_settings_checkbox("filter_multiplay_setting", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_multiplay_setting
+        imgui.indent(10); draw_settings_checkbox("filter_multiplay_setting", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests that allow")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.multiplay_types)
-        local multiplay_index = MULTIPLAY_TYPE_LOOKUP[conf.value] or 1
+        local multiplay_index = MULTIPLAY_TYPE_LOOKUP[filter.value] or 1
         local changed, new_index = imgui.combo("##filter_sos_list_multiplay_setting_filter", multiplay_index, MULTIPLAY_TYPE_LIST)
         imgui.pop_item_width()
-        if changed then conf.value = MULTIPLAY_TYPE_LIST[new_index] end
+        if changed then filter.value = MULTIPLAY_TYPE_LIST[new_index] end
         imgui.end_disabled()
         -- Quest Field Setting --------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_fields
-        imgui.indent(10); draw_settings_checkbox("filter_field", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_fields
+        imgui.indent(10); draw_settings_checkbox("filter_field", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests in")
         imgui.same_line()
         local field_str       = nil
               remaining_count = nil
         for _, field in ipairs(FIELD_LIST) do
-            if conf.list[field] then
+            if filter.list[field] then
                 if not remaining_count then 
                     local next_str = (field_str and field_str .. "," or "") .. get_localized_text(field) 
                     if (imgui.calc_text_size(next_str).x > 150) then remaining_count = 1
@@ -1057,23 +1057,23 @@ local function draw_mod_settings()
         end
         if     remaining_count                    then field_str = field_str .. " and +" .. tostring(remaining_count) .. " more"
         elseif not field_str or (field_str == "") then field_str = "<No Fields Selected>"                                        end
-        local new_index = draw_settings_menu(field_str, conf, FIELD_LIST, 0, true)
+        local new_index = draw_settings_menu(field_str, filter, FIELD_LIST, 0, true)
         if new_index then 
             local field      = FIELD_LIST[new_index]
-            conf.list[field] = not conf.list[field]
+            filter.list[field] = not filter.list[field]
         end
         imgui.end_disabled()
         -- Environment Setting --------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_environment
-        imgui.indent(10); draw_settings_checkbox("filter_environment", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_environment
+        imgui.indent(10); draw_settings_checkbox("filter_environment", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests in")
         imgui.same_line()
         local environments_str = nil
               remaining_count  = nil
         for _, environment in ipairs(ENVIRONMENT_LIST) do
-            if conf.list[environment] then
+            if filter.list[environment] then
                 if not remaining_count then 
                     local next_str = (environments_str and environments_str .. "," or "") .. get_localized_text(environment) 
                     if (imgui.calc_text_size(next_str).x > 150) then remaining_count  = 1
@@ -1085,53 +1085,53 @@ local function draw_mod_settings()
         end
         if     remaining_count                                  then environments_str = environments_str .. " and  +" .. tostring(remaining_count) .. " more"
         elseif not environments_str or (environments_str == "") then environments_str = "<No Environments Selected>"                                           end
-        local new_index = draw_settings_menu(environments_str, conf, ENVIRONMENT_LIST, 0, true)
+        local new_index = draw_settings_menu(environments_str, filter, ENVIRONMENT_LIST, 0, true)
         if new_index then 
             local env      = ENVIRONMENT_LIST[new_index]
-            conf.list[env] = not conf.list[env]
+            filter.list[env] = not filter.list[env]
         end
         imgui.end_disabled()
         -- Wishlist Monster -----------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.wishlist
-        imgui.indent(10); draw_settings_checkbox("filter_wishlist", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.wishlist
+        imgui.indent(10); draw_settings_checkbox("filter_wishlist", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with wishlisted monster drops ")
         imgui.end_disabled()
     end
     -- Item Filters -------------------------------------------------------------------------------------------------------------------------------------------
-    conf = config.item_filters
-    draw_settings_checkbox("item_filters_enabled", conf)
+    filter = config.item_filters
+    draw_settings_checkbox("item_filters_enabled", filter)
     imgui.same_line()
     imgui.text("Bonus Rewards Filters")
     imgui.same_line()
 
-    if not conf.enabled then imgui.text_colored("Disabled", -16776961)
+    if not filter.enabled then imgui.text_colored("Disabled", -16776961)
     else                     imgui.text_colored("Enabled",  -16711936)
         imgui.indent(10)
         imgui.text("Filter Mode:")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.filter_modes)
-        local filter_style_index = FILTER_MODE_LOOKUP[conf.mode] or 1
+        local filter_style_index = FILTER_MODE_LOOKUP[filter.mode] or 1
         local changed, new_index = imgui.combo("##item_filter_mode", filter_style_index, FILTER_MODE_LIST)
-        if changed then conf.mode = FILTER_MODE_LIST[new_index] end
+        if changed then filter.mode = FILTER_MODE_LIST[new_index] end
         imgui.pop_item_width()
         if filter_style_index == 1 then
             local filtering = ITEM_FILTERS.CUSTOM_MODE
-                  conf      = conf.custom
+                  filter    = filter.custom
             imgui.text("Custom Reward Filters:")
             imgui.same_line()
             imgui.push_item_width(UI_WIDTH.custom_mode_operators)
-            if not conf.operator then conf.operator = "AND" end
-            local custom_list_style_index = filtering.operator_lookup[conf.operator] or 1
+            if not filter.operator then filter.operator = "AND" end
+            local custom_list_style_index = filtering.operator_lookup[filter.operator] or 1
             local changed, new_index = imgui.combo("##item_filter_operator", custom_list_style_index, filtering.operators)
-            if changed then conf.operator = filtering.operators[new_index] end
+            if changed then filter.operator = filtering.operators[new_index] end
             imgui.pop_item_width()
             imgui.text("Show SOS quests where")
-            for item_id, item_num in pairs(conf.target_list) do
+            for item_id, item_num in pairs(filter.target_list) do
                 if item_num then
                     if imgui.button("-##item_filter_Remove_" .. item_id, { 24, 24 }) then 
-                        conf.target_list[item_id] = false -- tgaprk
+                        filter.target_list[item_id] = false -- tgaprk
                         filtering.update()
                     end
                     imgui.same_line()
@@ -1142,12 +1142,12 @@ local function draw_mod_settings()
                     imgui.push_item_width(30)
                     local changed, value = imgui.input_text("##item_filter_" .. item_id .. "_Amount", item_num, 1)
                     local value = tonumber(value) or 1
-                    if changed and (value >= 1) and (value <= 99) then conf.target_list[item_id] = value end
+                    if changed and (value >= 1) and (value <= 99) then filter.target_list[item_id] = value end
                     imgui.pop_item_width()
                     imgui.same_line()
                     imgui.text((value == 1) and "time" or "times")
                     imgui.indent(30)
-                    imgui.text(conf.operator)
+                    imgui.text(filter.operator)
                     imgui.unindent(30)
                 end
             end
@@ -1156,7 +1156,7 @@ local function draw_mod_settings()
             if (#filtering.list > 0) then
                 if imgui.button("+##item_filter_Add", { 24, 24 }) and (filtering.selected_index > 0) then
                     local selected_item_id = filtering.lookup[filtering.selected_index]
-                    conf.target_list[selected_item_id] = 1
+                    filter.target_list[selected_item_id] = 1
                     filtering.update()
                 end
             else
@@ -1166,65 +1166,65 @@ local function draw_mod_settings()
             imgui.push_item_width(UI_WIDTH.localized_items)
             local item_name    = filtering.list[filtering.selected_index]
             local selected_str = item_name and get_localized_text(item_name) or "<No more items can be selected>"
-            local new_index    = draw_settings_menu(selected_str, conf, filtering.list, item_name and filtering.selected_index or 0, false)
+            local new_index    = draw_settings_menu(selected_str, filter, filtering.list, item_name and filtering.selected_index or 0, false)
             if new_index then filtering.selected_index = new_index end
             imgui.pop_item_width()
         else
             local filtering = ITEM_FILTERS.MAX_QUANTITY
-                  conf      = conf.max_quantity
+                  filter    = filter.max_quantity
             imgui.text("Highest Quantity of ")
             imgui.same_line()
             imgui.push_item_width(UI_WIDTH.localized_items)
-            local selected_index = filtering.lookup[conf.target_item] or 1
+            local selected_index = filtering.lookup[filter.target_item] or 1
             local selected_str   = get_localized_text(filtering.list[selected_index]) or "<No Item Selected> "
             local new_index      = draw_settings_menu(selected_str, filtering, filtering.list, selected_index, false)
-            if new_index then conf.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
+            if new_index then filter.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
             imgui.pop_item_width()
         end
         imgui.unindent(10)
     end
     -- Lobby Member Quest Filters -----------------------------------------------------------------------------------------------------------------------------
-    filter = config.lobby_member_quest_filters
+    filters = config.lobby_member_quest_filters
     imgui.separator()
-    draw_settings_checkbox("general_lobby_member_filters", filter)
+    draw_settings_checkbox("general_lobby_member_filters", filters)
     imgui.same_line()
     imgui.text("Lobby Member Quest Filters")
     imgui.same_line()
-    if not filter.enabled then imgui.text_colored("Disabled", -16776961)
+    if not filters.enabled then imgui.text_colored("Disabled", -16776961)
     else                       imgui.text_colored("Enabled",  -16711936)
         -- without a password ---------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.without_password
-        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.without_password
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests without a password")
         imgui.end_disabled()
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
-        conf = filter.quest_join_approval
-        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_accept_setting", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.quest_join_approval
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_accept_setting", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with ")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.accept_modes)
-        local accept_option_index = ACCEPT_MODE_LOOKUP[conf.value] or 1
+        local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
         local changed, new_index  = imgui.combo("##filter_lobby_member_quest_list_accept_setting", accept_option_index, ACCEPT_MODE_LIST)
-        if changed then conf.value = ACCEPT_MODE_LIST[new_index] end
+        if changed then filter.value = ACCEPT_MODE_LIST[new_index] end
         imgui.pop_item_width()
         imgui.same_line()
         imgui.text("join approval ")
         imgui.end_disabled()
         -- available slots ----------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.joinable_quest
-        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_joinable_quest", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.joinable_quest
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_joinable_quest", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Show only quests with available slots")
         imgui.end_disabled()
         --- blocked users ----------------------------------------------------------------------------------------------------------------------------------------
-        conf = filter.blocked_users
-        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_blocked_users", conf); imgui.unindent(10)
-        imgui.begin_disabled(not conf.enabled)
+        filter = filters.blocked_users
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_blocked_users", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Hide Quests with Blocked Users")
         imgui.end_disabled()
@@ -1288,16 +1288,29 @@ local function close_mod_settings_window()
     save_config()
 end
 
+-- Note: Minor screen flickering during auto-search is normal. The mod instantly refreshes the in-game UI to find quests as safely and fast as possible without causing crashes.
 local function draw_mod_keep_searching()
-    imgui.text("\n 계속 검색중......\n\n")
-    if imgui.button("검색 중지", { 350, 50 }) then keep_searching.stop() end
+    imgui.spacing();imgui.spacing();imgui.spacing();
+    imgui.text_colored("Auto Search Settings", 0xFF00FFFF) -- 하늘색 계열 예시
+    imgui.separator()
+    imgui.text("Keep Searching Automatically")
+    imgui.text_colored("To Stop: Press Keyboard [ESC] or Mouse [Right] button.", 0xFF00FF00)
+    if imgui.button("[ Stop searching ] ", { 350, 50 }) then keep_searching.stop() end
     cursor_helper.draw_custom_cursor(config.cursor_scale)
 end
 
+local was_cancel_key_down = false
 re.on_frame(function() 
     if not is_window_open or not imgui.begin_window(MOD_TITLE, nil, 120) then return end  -- 8:NoScrollBar, 16:NoScrollWithMouse, 32:NoCollapse, 64:AlwaysAutoResize
-    if keep_searching.enabled then draw_mod_keep_searching() 
-    else                           draw_mod_settings()       end
+    if not keep_searching.enabled then draw_mod_settings()
+    else
+        if keep_searching.context_ptr then
+            local is_cancel_key_down = imgui.is_key_down(imgui.ImGuiKey.Key_Escape) or imgui.is_key_down(imgui.ImGuiKey.Key_MouseRight)
+            if is_cancel_key_down and not was_cancel_key_down then keep_searching.stop() end
+            was_cancel_key_down = is_cancel_key_down
+        end
+        draw_mod_keep_searching() 
+    end
     imgui.end_window() 
 end)
 
