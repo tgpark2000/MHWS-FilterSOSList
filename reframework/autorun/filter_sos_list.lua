@@ -841,7 +841,7 @@ local function draw_mod_settings()
     draw_settings_checkbox("keep_searching", config.keep_searching)
     imgui.begin_disabled(not config.keep_searching.enabled)
     imgui.same_line()
-    imgui.text("구조신호 퀘스트: 퀘스트 보일 때까지 계속 검색하기")
+    imgui.text("Keep Searching for SOS Quest")
     imgui.end_disabled()
     -- General SOS Filters ------------------------------------------------------------------------------------------------------------------------------------
     local filters = config.general_filters
@@ -1107,7 +1107,7 @@ local function draw_mod_settings()
     imgui.same_line()
 
     if not filter.enabled then imgui.text_colored("Disabled", -16776961)
-    else                     imgui.text_colored("Enabled",  -16711936)
+    else                       imgui.text_colored("Enabled",  -16711936)
         imgui.indent(10)
         imgui.text("Filter Mode:")
         imgui.same_line()
@@ -1191,7 +1191,7 @@ local function draw_mod_settings()
     imgui.text("Lobby Member Quest Filters")
     imgui.same_line()
     if not filters.enabled then imgui.text_colored("Disabled", -16776961)
-    else                       imgui.text_colored("Enabled",  -16711936)
+    else                        imgui.text_colored("Enabled",  -16711936)
         -- without a password ---------------------------------------------------------------------------------------------------------------------------------
         filter = filters.without_password
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", filter); imgui.unindent(10)
@@ -1288,7 +1288,20 @@ local function close_mod_settings_window()
     save_config()
 end
 
--- Note: Minor screen flickering during auto-search is normal. The mod instantly refreshes the in-game UI to find quests as safely and fast as possible without causing crashes.
+local window_width
+local function center_text(text, font_size, color)
+    if font_size then imgui.push_font_size(font_size) end
+    
+    local text_width  = imgui.calc_text_size(text).x
+    local current_pos = imgui.get_cursor_pos()
+    local target_x    = (window_width - text_width) * 0.5
+    imgui.set_cursor_pos({ target_x, current_pos.y })
+    
+    if color then imgui.text_colored(text, color)
+    else          imgui.text(text)                end
+    
+    if font_size then imgui.pop_font_size() end
+end
 local was_cancel_key_down = false
 local function draw_mod_keep_searching()
     if keep_searching.context_ptr then
@@ -1297,12 +1310,27 @@ local function draw_mod_keep_searching()
         was_cancel_key_down = is_cancel_key_down
     end
 
-    imgui.spacing();imgui.spacing();imgui.spacing();
-    imgui.text_colored("Auto Search Settings", 0xFF00FFFF) -- 하늘색 계열 예시
+    window_width = imgui.get_window_size().x
+    imgui.spacing()
+    center_text("Auto Searching......", 36, 0xFF00FFFF)
     imgui.separator()
-    imgui.text("Keep Searching Automatically")
-    imgui.text_colored("To Stop: Press Keyboard [ESC] or Mouse [Right] button.", 0xFF00FF00)
-    if imgui.button("[ Stop searching ] ", { 350, 50 }) then keep_searching.stop() end
+    imgui.spacing()
+    center_text("Minor flickering is inevitable due to the system's nature,", nil, nil)
+    center_text("as the mod continuously cycles through the in-game UI steps.", nil, nil)
+    center_text("This process ensures safe and rapid searching without causing crashes.", nil, nil)    
+    imgui.spacing()
+    center_text("To Stop: Press Keyboard [ESC] or Mouse [Right] button.", 18, 0xFF00FF00)    
+    imgui.spacing(); imgui.spacing();
+
+    local button_width = 410
+    local button_size  = { button_width, 50 }    
+    local current_pos  = imgui.get_cursor_pos()
+    local button_x     = (window_width - button_width) * 0.5
+    imgui.set_cursor_pos({ button_x, current_pos.y })
+    imgui.push_font_size(28)
+    if imgui.button("[ Stop Searching ] ", button_size) then keep_searching.stop() end
+    imgui.pop_font_size()
+    imgui.spacing()
     cursor_helper.draw_custom_cursor(config.cursor_scale)
 end
 
