@@ -3,7 +3,7 @@ local fs, imgui, io, json, log, math, os, pcall, re, sdk, string, table, thread,
 local MOD_TITLE <const>   = "Filter SOS List"
 local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
-
+local MyMod = require("_MyModules")
 local cursor_helper 
 xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
         if reframework:is_drawing_ui() or not is_window_open then return end
@@ -692,42 +692,6 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     end,
 }
 
-sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sortQuestDataList(System.Boolean)"), function(args)
-    if not config.enabled then return end
-    local quest_list_parts = sdk.to_managed_object(args[2])
-    local category         = quest_list_parts:get_field("<ViewCategory>k__BackingField")
-    if not ((category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY)) then return end
-    local quest_list      = quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")
-    local quest_list_size = quest_list:get_Count()
-    if (quest_list_size <= 0) then return end
-
-    local conf_list, reward_conf, is_reward_max_quantity = nil, nil, nil
-    if (category == RECRUITMENT_LOBBY) then conf_list = config.lobby_member_quest_filters 
-    else
-        conf_list   = config.general_filters
-        reward_conf = config.item_filters
-        if reward_conf.enabled then is_reward_max_quantity = (reward_conf.mode == "Max Quantity") end
-    end
-
-    for i = quest_list_size - 1, 0, -1 do
-        local quest_data = quest_list:get_Item(i)
-        if quest_data then
-            local should_remove = false
-            for _, filter_name in ipairs(filter_order) do
-                local filter_config = conf_list[filter_name] or (((filter_name == "item_reward_custom") and (not is_reward_max_quantity)) and reward_conf)
-                if filter_config and filter_config.enabled then
-                    local filter_method = filter_methods[filter_name]
-                    if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
-                end
-            end
-            if should_remove then quest_list:RemoveAt(i) end
-        end
-    end
-
-    if not is_reward_max_quantity then return end
-    filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
-return sdk.PreHookResult.CALL_ORIGINAL end)
-
 local function draw_settings_checkbox(setting_name, conf)
     local changed, value = imgui.checkbox("##filter_sos_list_" .. setting_name, conf.enabled or false)
     if changed then conf.enabled = value end
@@ -1271,6 +1235,60 @@ local function draw_mod_settings()
     cursor_helper.draw_custom_cursor(config.cursor_scale)
 end
 
+local keep_searching = {
+    enabled                      = false,
+    is_open_dialog_failed_search = false,
+    need_to_search_again         = false,
+    search_flow                  = nil,
+    delay_frames                 = 0,
+    active_search_ptr            = nil, 
+    context_ptr                  = nil,
+}
+function keep_searching.start(ptr)
+    if keep_searching.enabled then
+        --keep_searching.flow_ptr = ptr
+        is_window_open          = true
+        MyMod.addLog("1")
+    else
+        keep_searching.enabled                      = true
+        keep_searching.is_open_dialog_failed_search = false
+        keep_searching.need_to_search_again         = false
+        --keep_searching.flow_ptr                     = ptr
+        is_window_open                              = false
+        MyMod.addLog("2")
+    end
+end
+function keep_searching.stop()
+    MyMod.addLog("Stop")
+    keep_searching.enabled = false
+    keep_searching.need_to_search_again = false
+    is_window_open         = false
+end
+function keep_searching.set_search_again()
+    keep_searching.need_to_search_again = true
+    is_window_open                      = true
+end
+
+function keep_searching.again()
+    if keep_searching.flow_ptr and type(keep_searching.flow_ptr.call) == "function" then keep_searching.flow_ptr:nextFlow() end
+end
+
+local function trigger_failed_search_flow_via_context()
+    if not config.enabled or not keep_searching.enabled or not keep_searching.context_ptr then return end
+
+    keep_searching.is_open_dialog_failed_search = true
+    keep_searching.need_to_search_again         = true
+    keep_searching.delay_frames                 = 60
+    is_window_open                              = true
+    keep_searching.context_ptr:set_field("IsSearchAgain",  true)
+    keep_searching.context_ptr:set_field("IsSearchFailed", false)
+    keep_searching.context_ptr:set_field("IsRestoreUI",    false)
+    keep_searching.context_ptr:set_field("IsOpenFinished", false)
+    keep_searching.context_ptr:set_field("IsNextFlow",     false)
+    keep_searching.context_ptr:set_field("IsCancel",       true)
+
+end
+
 local function open_mod_settings_window()
     is_window_open = true
     save_config()
@@ -1281,20 +1299,123 @@ local function close_mod_settings_window()
     save_config()
 end
 
+local function draw_mod_keep_searching()
+    imgui.text("\n 계속 검색중......\n")
+    if imgui.button("검색 중지", { 350, 50 }) then keep_searching.stop() end
+    cursor_helper.draw_custom_cursor(config.cursor_scale)
+end
+
 re.on_frame(function() 
     if not is_window_open or not imgui.begin_window(MOD_TITLE, nil, 120) then return end  -- 8:NoScrollBar, 16:NoScrollWithMouse, 32:NoCollapse, 64:AlwaysAutoResize
-    draw_mod_settings()
+
+    if keep_searching.enabled and keep_searching.delay_frames > 0 then
+        keep_searching.delay_frames = keep_searching.delay_frames - 1
+        if keep_searching.delay_frames == 0 then keep_searching.again() end
+    end
+    
+    if keep_searching.enabled then draw_mod_keep_searching() 
+    else                           draw_mod_settings()       end
     imgui.end_window() 
 end)
+
+sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sortQuestDataList(System.Boolean)"), function(args)
+    if not config.enabled then return end
+    local quest_list_parts = sdk.to_managed_object(args[2])
+    local category         = quest_list_parts:get_field("<ViewCategory>k__BackingField")
+    if not ((category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY)) then return end
+    local quest_list = quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")
+    repeat
+        local quest_list_size = quest_list:get_Count()
+        if (quest_list_size <= 0) then break end
+
+        local conf_list, reward_conf, is_reward_max_quantity = nil, nil, nil
+        if (category == RECRUITMENT_LOBBY) then conf_list = config.lobby_member_quest_filters 
+        else
+            conf_list   = config.general_filters
+            reward_conf = config.item_filters
+            if reward_conf.enabled then is_reward_max_quantity = (reward_conf.mode == "Max Quantity") end
+        end
+
+        for i = quest_list_size - 1, 0, -1 do
+            local quest_data = quest_list:get_Item(i)
+            if quest_data then
+                local should_remove = false
+                for _, filter_name in ipairs(filter_order) do
+                    local filter_config = conf_list[filter_name] or (((filter_name == "item_reward_custom") and (not is_reward_max_quantity)) and reward_conf)
+                    if filter_config and filter_config.enabled then
+                        local filter_method = filter_methods[filter_name]
+                        if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
+                    end
+                end
+                if should_remove then quest_list:RemoveAt(i) end
+            end
+        end
+
+        if not is_reward_max_quantity then break end
+        filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
+    until true
+    if keep_searching.enabled then
+        if (quest_list:get_Count() == 0) then 
+                local context = quest_list_parts:get_QuestCounterUI():get_ViewFlowContext()
+                if context then
+                    MyMod.addLog("context 성공!")
+                    keep_searching.context_ptr = context
+                else
+                    MyMod.addLog("context 실패!")
+                end
+            trigger_failed_search_flow_via_context()
+        end
+    end
+return sdk.PreHookResult.CALL_ORIGINAL end, function(retval)    
+return retval end)
 
 sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("setQuestListInCategory(app.GUI050000.CATEGORY)"), function(args)
     local category = sdk.to_int64(args[3])
     if (category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY) then  open_mod_settings_window()
     else                                                                         close_mod_settings_window() end
 return sdk.PreHookResult.CALL_ORIGINAL end)
-sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("closeQuestDetailWindow()"),               function(args) close_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
-sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("onEnter()"),  function(args)  open_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
-sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("nextFlow()"), function(args) close_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
+sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("closeQuestDetailWindow()"), function(args) close_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
+
+sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("onEnter()"),  function(args)
+    keep_searching.flow_ptr = sdk.to_managed_object(args[2])
+    if not keep_searching.enabled then open_mod_settings_window() end
+return sdk.PreHookResult.CALL_ORIGINAL end, function(retval)
+    if keep_searching.enabled and keep_searching.is_open_dialog_failed_search then
+        keep_searching.is_open_dialog_failed_search = false
+        keep_searching.need_to_search_again         = true
+        keep_searching.delay_frames                 = 60
+        is_window_open                              = true
+    end
+return retval end)
+
+sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("nextFlow()"), function(args) 
+    keep_searching.flow_ptr = nil --sdk.to_managed_object(args[2])
+    keep_searching.start()     
+return sdk.PreHookResult.CALL_ORIGINAL end)
+sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("cancelFlow()"), function(args) 
+    keep_searching.stop()
+return sdk.PreHookResult.CALL_ORIGINAL end)
+
+sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("openDialog_faildSearchQuest(System.Action)"), function(args)
+    if not config.enabled or not keep_searching.enabled then return sdk.PreHookResult.CALL_ORIGINAL end
+    keep_searching.is_open_dialog_failed_search = true
+    local gui = sdk.to_managed_object(args[2])
+    local context = gui:get_ViewFlowContext()
+    if context then
+        MyMod.addLog("Context 성공!!!") 
+        keep_searching.context_ptr = context
+        trigger_failed_search_flow_via_context()
+    else
+        MyMod.addLog("Context 실패!!!") 
+    end
+return sdk.PreHookResult.CALL_ORIGINAL end)
+
+sdk.hook(sdk.find_type_definition("app.cGUISystemModuleNotifyWindowApp"):get_method("openGUI()"), function(args)
+    if not config.enabled or not keep_searching.enabled or not keep_searching.is_open_dialog_failed_search then return sdk.PreHookResult.CALL_ORIGINAL end
+    local notifyWindow  = sdk.to_managed_object(args[2])
+    local currentWindow = notifyWindow:get__CurInfoApp()
+    currentWindow:executeWindowEndFunc()
+return sdk.PreHookResult.SKIP_ORIGINAL end)
 
 re.on_draw_ui(function()
 	if imgui.tree_node("Filter SOS List##filter_sos_list_config") then
