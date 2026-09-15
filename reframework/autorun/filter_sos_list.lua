@@ -1289,7 +1289,14 @@ local function close_mod_settings_window()
 end
 
 -- Note: Minor screen flickering during auto-search is normal. The mod instantly refreshes the in-game UI to find quests as safely and fast as possible without causing crashes.
+local was_cancel_key_down = false
 local function draw_mod_keep_searching()
+    if keep_searching.context_ptr then
+        local is_cancel_key_down = imgui.is_key_down(imgui.ImGuiKey.Key_Escape) or imgui.is_key_down(imgui.ImGuiKey.Key_MouseRight)
+        if is_cancel_key_down and not was_cancel_key_down then keep_searching.stop() end
+        was_cancel_key_down = is_cancel_key_down
+    end
+
     imgui.spacing();imgui.spacing();imgui.spacing();
     imgui.text_colored("Auto Search Settings", 0xFF00FFFF) -- 하늘색 계열 예시
     imgui.separator()
@@ -1299,18 +1306,10 @@ local function draw_mod_keep_searching()
     cursor_helper.draw_custom_cursor(config.cursor_scale)
 end
 
-local was_cancel_key_down = false
 re.on_frame(function() 
     if not is_window_open or not imgui.begin_window(MOD_TITLE, nil, 120) then return end  -- 8:NoScrollBar, 16:NoScrollWithMouse, 32:NoCollapse, 64:AlwaysAutoResize
     if not keep_searching.enabled then draw_mod_settings()
-    else
-        if keep_searching.context_ptr then
-            local is_cancel_key_down = imgui.is_key_down(imgui.ImGuiKey.Key_Escape) or imgui.is_key_down(imgui.ImGuiKey.Key_MouseRight)
-            if is_cancel_key_down and not was_cancel_key_down then keep_searching.stop() end
-            was_cancel_key_down = is_cancel_key_down
-        end
-        draw_mod_keep_searching() 
-    end
+    else                               draw_mod_keep_searching() end
     imgui.end_window() 
 end)
 
