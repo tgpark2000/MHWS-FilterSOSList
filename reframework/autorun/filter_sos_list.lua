@@ -152,6 +152,9 @@ local config = {
             enabled = false,
         },
     },
+    keep_searching = {
+        enabled = false,
+    },
     cursor_scale = 1.5,
 }
 
@@ -834,6 +837,12 @@ local function draw_mod_settings()
     imgui.same_line()
     if config.enabled then imgui.text_colored("Enabled",  -16711936)
     else                   imgui.text_colored("Disabled", -16776961) end
+
+    draw_settings_checkbox("keep_searching", config.keep_searching)
+    imgui.begin_disabled(not config.keep_searching.enabled)
+    imgui.same_line()
+    imgui.text("구조신호 퀘스트: 퀘스트 보일 때까지 계속 검색하기")
+    imgui.end_disabled()
     -- General SOS Filters ------------------------------------------------------------------------------------------------------------------------------------
     local filter = config.general_filters
     local conf
@@ -1241,24 +1250,22 @@ local keep_searching = {
     context_ptr                  = nil,
 }
 function keep_searching.start()
+    if not config.enabled or not (config.general_filters.enabled or config.item_filters.enabled) then return end
     if keep_searching.enabled then is_window_open = true
     else
-        keep_searching.enabled                      = true
+        keep_searching.enabled                      = config.keep_searching.enabled
         keep_searching.is_open_dialog_failed_search = false
         is_window_open                              = false
     end
 end
 function keep_searching.stop()
-    keep_searching.enabled = false
-    is_window_open         = false
     if keep_searching.context_ptr then
+        is_window_open = false
         keep_searching.context_ptr:set_field("IsSearchAgain",  false)
         keep_searching.context_ptr:set_field("IsCancel",       false)
-        keep_searching.context_ptr:set_field("IsSearchFailed", false)
-        keep_searching.context_ptr:set_field("IsRestoreUI",    false)
-        keep_searching.context_ptr:set_field("IsOpenFinished", false)
-        keep_searching.context_ptr:set_field("IsNextFlow",     false)
+        keep_searching.context_ptr = nil
     end
+    keep_searching.enabled = false
 end
 
 function keep_searching.search_again(context)
@@ -1269,10 +1276,6 @@ function keep_searching.search_again(context)
     is_window_open = true
     keep_searching.context_ptr:set_field("IsSearchAgain",  true)
     keep_searching.context_ptr:set_field("IsCancel",       true)
-    keep_searching.context_ptr:set_field("IsSearchFailed", false)
-    keep_searching.context_ptr:set_field("IsRestoreUI",    false)
-    keep_searching.context_ptr:set_field("IsOpenFinished", false)
-    keep_searching.context_ptr:set_field("IsNextFlow",     false)
 end
 
 local function open_mod_settings_window()
@@ -1286,14 +1289,13 @@ local function close_mod_settings_window()
 end
 
 local function draw_mod_keep_searching()
-    imgui.text("\n 계속 검색중......\n")
+    imgui.text("\n 계속 검색중......\n\n")
     if imgui.button("검색 중지", { 350, 50 }) then keep_searching.stop() end
     cursor_helper.draw_custom_cursor(config.cursor_scale)
 end
 
 re.on_frame(function() 
     if not is_window_open or not imgui.begin_window(MOD_TITLE, nil, 120) then return end  -- 8:NoScrollBar, 16:NoScrollWithMouse, 32:NoCollapse, 64:AlwaysAutoResize
-    
     if keep_searching.enabled then draw_mod_keep_searching() 
     else                           draw_mod_settings()       end
     imgui.end_window() 
@@ -1335,13 +1337,13 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
         if not is_reward_max_quantity then break end
         filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
     until true
-    if keep_searching.enabled and (quest_list_parts:get_ViewCategory() == SERCH_RESCUE_SIGNAL) then
-        if (quest_list:get_Count() == 0) then 
+    if keep_searching.enabled then
+        if (quest_list:get_Count() == 0) and (quest_list_parts:get_ViewCategory() == SERCH_RESCUE_SIGNAL) then 
             local gui050000 = quest_list_parts:get_QuestCounterUI()
             local context   = gui050000:get_ViewFlowContext()
             keep_searching.search_again(context)
         else
-            keep_searching.enabled = false
+            keep_searching.stop()
         end
     end
 return sdk.PreHookResult.CALL_ORIGINAL end)
