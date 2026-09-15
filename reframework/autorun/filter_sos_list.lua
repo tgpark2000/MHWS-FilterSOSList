@@ -3,7 +3,10 @@ local fs, imgui, io, json, log, math, os, pcall, re, sdk, string, table, thread,
 local MOD_TITLE <const>   = "Filter SOS List"
 local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
-local MyMod = require("_MyModules")
+
+local MyMod
+xpcall(function() MyMod = require("_MyModules") end, function() MyMod = { addLog = log.debug } end)
+
 local cursor_helper 
 xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
         if reframework:is_drawing_ui() or not is_window_open then return end
