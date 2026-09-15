@@ -1263,10 +1263,10 @@ function keep_searching.start()
 end
 function keep_searching.stop()
     if keep_searching.context_ptr then
-        is_window_open = false
-        keep_searching.context_ptr:set_field("IsSearchAgain",  false)
-        keep_searching.context_ptr:set_field("IsCancel",       false)
+        keep_searching.context_ptr:set_field("IsSearchAgain", false)
+        keep_searching.context_ptr:set_field("IsCancel",      false)
         keep_searching.context_ptr = nil
+        is_window_open             = false
     end
     keep_searching.enabled = false
 end
@@ -1277,8 +1277,8 @@ function keep_searching.search_again(context)
     if not keep_searching.context_ptr                   then return                               end
 
     is_window_open = true
-    keep_searching.context_ptr:set_field("IsSearchAgain",  true)
-    keep_searching.context_ptr:set_field("IsCancel",       true)
+    keep_searching.context_ptr:set_field("IsSearchAgain", true)
+    keep_searching.context_ptr:set_field("IsCancel",      true)
 end
 
 local function open_mod_settings_window()
@@ -1320,7 +1320,6 @@ local function draw_mod_keep_searching()
     imgui.spacing()
     center_text("Minor flickering is inevitable due to the system's nature,", nil, nil)
     center_text("as the mod continuously cycles through the in-game UI steps.", nil, nil)
-    center_text("This process ensures safe and rapid searching without causing crashes.", nil, nil)    
     imgui.spacing()
     center_text("To Stop: Press Keyboard [ESC] or Mouse [Right] button.", 18, 0xFF00FF00)    
     imgui.spacing(); imgui.spacing();
