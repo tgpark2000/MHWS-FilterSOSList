@@ -5,7 +5,7 @@ local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
 
 local MyMod
-xpcall(function() MyMod = require("_MyModules") end, function() MyMod = { addLog = log.debug } end)
+xpcall(function() MyMod = require("_MyModules") end, function() MyMod = { addLog = log.debug, addInfo = log.info, addError = log.error, addWarn = log.warn } end)
 
 local cursor_helper 
 xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
