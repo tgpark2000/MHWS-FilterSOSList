@@ -1238,55 +1238,41 @@ end
 local keep_searching = {
     enabled                      = false,
     is_open_dialog_failed_search = false,
-    need_to_search_again         = false,
-    search_flow                  = nil,
-    delay_frames                 = 0,
-    active_search_ptr            = nil, 
     context_ptr                  = nil,
 }
-function keep_searching.start(ptr)
-    if keep_searching.enabled then
-        --keep_searching.flow_ptr = ptr
-        is_window_open          = true
-        MyMod.addLog("1")
+function keep_searching.start()
+    if keep_searching.enabled then is_window_open = true
     else
         keep_searching.enabled                      = true
         keep_searching.is_open_dialog_failed_search = false
-        keep_searching.need_to_search_again         = false
-        --keep_searching.flow_ptr                     = ptr
         is_window_open                              = false
-        MyMod.addLog("2")
     end
 end
 function keep_searching.stop()
-    MyMod.addLog("Stop")
     keep_searching.enabled = false
-    keep_searching.need_to_search_again = false
     is_window_open         = false
-end
-function keep_searching.set_search_again()
-    keep_searching.need_to_search_again = true
-    is_window_open                      = true
+    if keep_searching.context_ptr then
+        keep_searching.context_ptr:set_field("IsSearchAgain",  false)
+        keep_searching.context_ptr:set_field("IsCancel",       false)
+        keep_searching.context_ptr:set_field("IsSearchFailed", false)
+        keep_searching.context_ptr:set_field("IsRestoreUI",    false)
+        keep_searching.context_ptr:set_field("IsOpenFinished", false)
+        keep_searching.context_ptr:set_field("IsNextFlow",     false)
+    end
 end
 
-function keep_searching.again()
-    if keep_searching.flow_ptr and type(keep_searching.flow_ptr.call) == "function" then keep_searching.flow_ptr:nextFlow() end
-end
+function keep_searching.search_again(context)
+    if not config.enabled or not keep_searching.enabled then return                               end
+    if context                                          then keep_searching.context_ptr = context end
+    if not keep_searching.context_ptr                   then return                               end
 
-local function trigger_failed_search_flow_via_context()
-    if not config.enabled or not keep_searching.enabled or not keep_searching.context_ptr then return end
-
-    keep_searching.is_open_dialog_failed_search = true
-    keep_searching.need_to_search_again         = true
-    keep_searching.delay_frames                 = 60
-    is_window_open                              = true
+    is_window_open = true
     keep_searching.context_ptr:set_field("IsSearchAgain",  true)
+    keep_searching.context_ptr:set_field("IsCancel",       true)
     keep_searching.context_ptr:set_field("IsSearchFailed", false)
     keep_searching.context_ptr:set_field("IsRestoreUI",    false)
     keep_searching.context_ptr:set_field("IsOpenFinished", false)
     keep_searching.context_ptr:set_field("IsNextFlow",     false)
-    keep_searching.context_ptr:set_field("IsCancel",       true)
-
 end
 
 local function open_mod_settings_window()
@@ -1307,11 +1293,6 @@ end
 
 re.on_frame(function() 
     if not is_window_open or not imgui.begin_window(MOD_TITLE, nil, 120) then return end  -- 8:NoScrollBar, 16:NoScrollWithMouse, 32:NoCollapse, 64:AlwaysAutoResize
-
-    if keep_searching.enabled and keep_searching.delay_frames > 0 then
-        keep_searching.delay_frames = keep_searching.delay_frames - 1
-        if keep_searching.delay_frames == 0 then keep_searching.again() end
-    end
     
     if keep_searching.enabled then draw_mod_keep_searching() 
     else                           draw_mod_settings()       end
@@ -1354,64 +1335,37 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
         if not is_reward_max_quantity then break end
         filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
     until true
-    if keep_searching.enabled then
+    if keep_searching.enabled and (quest_list_parts:get_ViewCategory() == SERCH_RESCUE_SIGNAL) then
         if (quest_list:get_Count() == 0) then 
-                local context = quest_list_parts:get_QuestCounterUI():get_ViewFlowContext()
-                if context then
-                    MyMod.addLog("context 성공!")
-                    keep_searching.context_ptr = context
-                else
-                    MyMod.addLog("context 실패!")
-                end
-            trigger_failed_search_flow_via_context()
+            local gui050000 = quest_list_parts:get_QuestCounterUI()
+            local context   = gui050000:get_ViewFlowContext()
+            keep_searching.search_again(context)
+        else
+            keep_searching.enabled = false
         end
     end
-return sdk.PreHookResult.CALL_ORIGINAL end, function(retval)    
-return retval end)
+return sdk.PreHookResult.CALL_ORIGINAL end)
 
 sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("setQuestListInCategory(app.GUI050000.CATEGORY)"), function(args)
     local category = sdk.to_int64(args[3])
     if (category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY) then  open_mod_settings_window()
     else                                                                         close_mod_settings_window() end
 return sdk.PreHookResult.CALL_ORIGINAL end)
-sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("closeQuestDetailWindow()"), function(args) close_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
-
-sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("onEnter()"),  function(args)
-    keep_searching.flow_ptr = sdk.to_managed_object(args[2])
-    if not keep_searching.enabled then open_mod_settings_window() end
-return sdk.PreHookResult.CALL_ORIGINAL end, function(retval)
-    if keep_searching.enabled and keep_searching.is_open_dialog_failed_search then
-        keep_searching.is_open_dialog_failed_search = false
-        keep_searching.need_to_search_again         = true
-        keep_searching.delay_frames                 = 60
-        is_window_open                              = true
-    end
-return retval end)
-
-sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("nextFlow()"), function(args) 
-    keep_searching.flow_ptr = nil --sdk.to_managed_object(args[2])
-    keep_searching.start()     
-return sdk.PreHookResult.CALL_ORIGINAL end)
-sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("cancelFlow()"), function(args) 
-    keep_searching.stop()
-return sdk.PreHookResult.CALL_ORIGINAL end)
-
+sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("closeQuestDetailWindow()"),                   function(args) close_mod_settings_window() return sdk.PreHookResult.CALL_ORIGINAL end)
+sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("onEnter()"),      function(args) open_mod_settings_window()  return sdk.PreHookResult.CALL_ORIGINAL end)
+sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("nextFlow()"),     function(args) keep_searching.start()      return sdk.PreHookResult.CALL_ORIGINAL end)
+sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("cancelFlow()"),   function(args) keep_searching.stop()       return sdk.PreHookResult.CALL_ORIGINAL end)
 sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("openDialog_faildSearchQuest(System.Action)"), function(args)
     if not config.enabled or not keep_searching.enabled then return sdk.PreHookResult.CALL_ORIGINAL end
     keep_searching.is_open_dialog_failed_search = true
-    local gui = sdk.to_managed_object(args[2])
+    local gui     = sdk.to_managed_object(args[2])
     local context = gui:get_ViewFlowContext()
-    if context then
-        MyMod.addLog("Context 성공!!!") 
-        keep_searching.context_ptr = context
-        trigger_failed_search_flow_via_context()
-    else
-        MyMod.addLog("Context 실패!!!") 
-    end
+    keep_searching.search_again(context)
 return sdk.PreHookResult.CALL_ORIGINAL end)
 
 sdk.hook(sdk.find_type_definition("app.cGUISystemModuleNotifyWindowApp"):get_method("openGUI()"), function(args)
     if not config.enabled or not keep_searching.enabled or not keep_searching.is_open_dialog_failed_search then return sdk.PreHookResult.CALL_ORIGINAL end
+    keep_searching.is_open_dialog_failed_search = false
     local notifyWindow  = sdk.to_managed_object(args[2])
     local currentWindow = notifyWindow:get__CurInfoApp()
     currentWindow:executeWindowEndFunc()
