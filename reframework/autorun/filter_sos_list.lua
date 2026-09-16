@@ -135,6 +135,9 @@ local config = {
         max_quantity = {
             target_item = "469",
         },
+        target_reward_filter = {
+            target_item = "469",
+        }
     },
     lobby_member_quest_filters = {
         enabled = false,
@@ -192,8 +195,8 @@ local EVALUATORS <const>             = {
 local MULTIPLAY_TYPE_LIST <const>   = {  "Players & NPCs",       "Players" }
 local MULTIPLAY_TYPE_LOOKUP <const> = { ["Players & NPCs"] = 1, ["Players"] = 2 }
 
-local FILTER_MODE_LIST <const>   = {  "Custom",       "Max Quantity" }
-local FILTER_MODE_LOOKUP <const> = { ["Custom"] = 1, ["Max Quantity"] = 2 }
+local FILTER_MODE_LIST <const>   = {  "Custom",       "Max Quantity",       "Target Reward Filter" }
+local FILTER_MODE_LOOKUP <const> = { ["Custom"] = 1, ["Max Quantity"] = 2, ["Target Reward Filter"] = 3 }
 
 local FIELD_LIST <const>   = {       "Plains",       "Forest",       "Basin",       "Cliffs",       "Wyveria",       "Wounded Hollow",        "Rimechain Peak",        "Dragontorch Shrine",        "Forgotten Machineworks" }
 local FIELD_ID_MAP <const> = { [0] = "Plains", [1] = "Forest", [2] = "Basin", [3] = "Cliffs", [4] = "Wyveria", [9] = "Wounded Hollow", [10] = "Rimechain Peak", [11] = "Dragontorch Shrine", [13] = "Forgotten Machineworks" }
@@ -294,7 +297,7 @@ function ENEMY_BOSS.update()
 end
 
 local ITEM_FILTERS ={
-    MAX_QUANTITY = {
+    REQUIRED_REWARDS = {
         list   = { "Basic Material", "Valuable Material", "Ancient Weapon Fragment", "Ancient Orb - Armor", "Ancient Orb - Sword", "Heavy Armor Sphere", "Glowing Stone" },
         lookup = { ["469"] = 1, ["470"] = 2, ["478"] = 3, ["157"] = 4, ["620"] = 5, ["653"] = 6, ["820"] = 7 },
     },
@@ -659,21 +662,19 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
                 local quest_data = quest_list:get_Item(i)
                 if not quest_data then break end
 
-                local reward_table     = {}
-                local quest_reward_obj = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
-                local item_work_list   = export_rewards:call(reward_util, quest_reward_obj)
+                local target_item_count = 0
+                local quest_reward_obj  = quest_data:get_ExEnemyRewardItemInfo()  -- app.cExEnemyRewardItemInfo get_ExEnemyRewardItemInfo()
+                local item_work_list    = export_rewards:call(reward_util, quest_reward_obj)
                 for item_i = 0, item_work_list._size - 1 do
                     local item_work = item_work_list:get_Item(item_i)
                     local item_id   = tostring(item_work:get_ItemId())
-                    local item_num  = item_work.Num or 0
-
-                    if is_contains(GEM_ID_LIST, item_id) then item_id = "GEM" end
-                    reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
+                    if (item_id == target_item) then 
+                        local item_num  = item_work.Num or 0
+                        target_item_count = target_item_count + item_num
+                    end
                 end
-
-                local item_num = reward_table[target_item] or 0
-                if     (item_num < max_quantity) then quest_list:RemoveAt(i)  break 
-                elseif (item_num > max_quantity) then max_quantity = item_num end 
+                if     (target_item_count < max_quantity) then quest_list:RemoveAt(i)           break 
+                elseif (target_item_count > max_quantity) then max_quantity = target_item_count end 
             until true
         end
 
@@ -691,6 +692,40 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
                 end
                 if (total_quantity < max_quantity) then quest_list:RemoveAt(i) end
             end
+        end
+    end,
+    ["item_reward_target_reward_filter"] = function(quest_list, target_item)
+        if not quest_list then return end
+
+        local quest_list_size = quest_list:get_Count()
+        if quest_list_size == 0 then return end 
+
+        local item_quantity_list = {}
+        for i = (quest_list_size - 1), 0, -1  do 
+            local quest_data = quest_list:get_Item(i)
+            if not quest_data then return end
+
+            local reward_item_count = 0
+            local quest_reward_obj  = quest_data:get_ExEnemyRewardItemInfo()
+            local item_work_list    = export_rewards:call(reward_util, quest_reward_obj)
+            for j = 0, item_work_list._size - 1 do 
+                local item_work = item_work_list:get_Item(j)
+                local item_id   = tostring(item_work:get_ItemId())
+                if (item_id == target_item) then reward_item_count = reward_item_count + (item_work.Num or 0) end                
+            end
+            if (reward_item_count > 0) then table.insert(item_quantity_list, { num = reward_item_count, quest_data = quest_data }) end
+        end
+        table.sort(item_quantity_list, function(a, b) return (a.num > b.num) end)
+
+        local active_count = #item_quantity_list
+        for i = 0, (active_count - 1) do
+            local index = i + 1
+            quest_list:set_Item(i, item_quantity_list[index].quest_data)
+        end
+
+        for i = quest_list_size - 1, active_count, -1  do 
+            local last_index = quest_list:get_Count() - 1
+            if (last_index >= 0) then quest_list:RemoveAt(last_index) end
         end
     end,
 }
@@ -825,6 +860,20 @@ local function draw_slider_range_int(id, current_min, current_max)
     return current_min, current_max    
 end
 
+local function draw_button(name, size)
+    local style_button         = 21
+    local style_button_hovered = 22
+    local style_ButtonActive   = 23
+    imgui.push_style_color(style_button,         0xFF2D5A27)
+    imgui.push_style_color(style_button_hovered, 0xFF3D7A35)
+    imgui.push_style_color(style_ButtonActive,   0xFF1B3817)
+    imgui.push_style_var(imgui.ImGuiStyleVar.FrameRounding, 4.0)
+    local is_clicked = imgui.button(name, size)
+    imgui.pop_style_color(3)
+    imgui.pop_style_var(1)
+    return is_clicked
+end
+
 local function draw_mod_settings()
     imgui.spacing()
     draw_settings_checkbox("enabled", config)
@@ -837,7 +886,7 @@ local function draw_mod_settings()
     draw_settings_checkbox("keep_searching", config.keep_searching)
     imgui.begin_disabled(not config.keep_searching.enabled)
     imgui.same_line()
-    imgui.text("Keep Searching for SOS Quest")
+    imgui.text("Keep searching for SOS Quest")
     imgui.end_disabled()
     -- General SOS Filters ------------------------------------------------------------------------------------------------------------------------------------
     local filters = config.general_filters
@@ -917,7 +966,7 @@ local function draw_mod_settings()
         if     remaining_count                              then boss_names_str = boss_names_str .. " and +" .. tostring(remaining_count) .. " more"
         elseif not boss_names_str or (boss_names_str == "") then boss_names_str = "  <No Monster Name Selected>  "                                   end
         if remaining_count then
-            if imgui.button("Reset", { 50, 24 }) then filter.list = {} end
+            if draw_button("Reset", { 50, 24 }) then filter.list = {} end
             imgui.same_line()
         end
         imgui.set_next_item_width(280)
@@ -1112,7 +1161,7 @@ local function draw_mod_settings()
         local changed, new_index = imgui.combo("##item_filter_mode", filter_style_index, FILTER_MODE_LIST)
         if changed then filter.mode = FILTER_MODE_LIST[new_index] end
         imgui.pop_item_width()
-        if filter_style_index == 1 then
+        if (filter_style_index == 1) then  -- Custom
             local filtering = ITEM_FILTERS.CUSTOM_MODE
                   filter    = filter.custom
             imgui.text("Custom Reward Filters:")
@@ -1126,7 +1175,7 @@ local function draw_mod_settings()
             imgui.text("Show SOS quests where")
             for item_id, item_num in pairs(filter.target_list) do
                 if item_num then
-                    if imgui.button("-##item_filter_Remove_" .. item_id, { 24, 24 }) then 
+                    if draw_button("-##item_filter_Remove_" .. item_id, { 24, 24 }) then
                         filter.target_list[item_id] = false
                         filtering.update()
                     end
@@ -1150,7 +1199,7 @@ local function draw_mod_settings()
             imgui.same_line()
             imgui.text("..?")
             if (#filtering.list > 0) then
-                if imgui.button("+##item_filter_Add", { 24, 24 }) and (filtering.selected_index > 0) then
+                if draw_button("+##item_filter_Add", { 24, 24 }) and (filtering.selected_index > 0) then
                     local selected_item_id = filtering.lookup[filtering.selected_index]
                     filter.target_list[selected_item_id] = 1
                     filtering.update()
@@ -1165,8 +1214,8 @@ local function draw_mod_settings()
             local new_index    = draw_settings_menu(selected_str, filter, filtering.list, item_name and filtering.selected_index or 0, false)
             if new_index then filtering.selected_index = new_index end
             imgui.pop_item_width()
-        else
-            local filtering = ITEM_FILTERS.MAX_QUANTITY
+        elseif (filter_style_index == 2) then  -- Max Quantity
+            local filtering = ITEM_FILTERS.REQUIRED_REWARDS
                   filter    = filter.max_quantity
             imgui.text("Highest Quantity of ")
             imgui.same_line()
@@ -1174,6 +1223,17 @@ local function draw_mod_settings()
             local selected_index = filtering.lookup[filter.target_item] or 1
             local selected_str   = get_localized_text(filtering.list[selected_index]) or "<No Item Selected> "
             local new_index      = draw_settings_menu(selected_str, filtering, filtering.list, selected_index, false)
+            if new_index then filter.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
+            imgui.pop_item_width()
+        else  -- Target Reward Filter
+            local filtering = ITEM_FILTERS.REQUIRED_REWARDS
+                  filter    = filter.target_reward_filter
+            imgui.text("Sort by ")
+            imgui.same_line()
+            imgui.push_item_width(UI_WIDTH.localized_items)
+            local selected_index = filtering.lookup[filter.target_item] or 1
+            local selected_str   = get_localized_text(filtering.list[selected_index]) or " <No Item Selected> "
+            local new_index      = draw_settings_menu(selected_str .. "  (High to Low)", filtering, filtering.list, selected_index, false)
             if new_index then filter.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
             imgui.pop_item_width()
         end
@@ -1299,6 +1359,7 @@ local function center_text(text, font_size, color)
     
     if font_size then imgui.pop_font_size() end
 end
+
 local was_cancel_key_down = false
 local function draw_mod_keep_searching()
     if keep_searching.context_ptr then
@@ -1323,8 +1384,7 @@ local function draw_mod_keep_searching()
     local current_pos  = imgui.get_cursor_pos()
     local button_x     = (window_width - button_width) * 0.5
     imgui.set_cursor_pos({ button_x, current_pos.y })
-    imgui.push_font_size(28)
-    if imgui.button("[ Stop Searching ] ", button_size) then keep_searching.stop() end
+    if draw_button("[ Stop Searching ] ", button_size) then keep_searching.stop() end
     imgui.pop_font_size()
     imgui.spacing()
     cursor_helper.draw_custom_cursor(config.cursor_scale)
@@ -1342,17 +1402,18 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
     local quest_list_parts = sdk.to_managed_object(args[2])
     local category         = quest_list_parts:get_field("<ViewCategory>k__BackingField")
     if not ((category == SERCH_RESCUE_SIGNAL) or (category == RECRUITMENT_LOBBY)) then return end
-    local quest_list = quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")
+    local quest_list      = quest_list_parts:get_field("<ViewQuestDataList>k__BackingField")
+    local pre_hook_result = sdk.PreHookResult.CALL_ORIGINAL
     repeat
         local quest_list_size = quest_list:get_Count()
         if (quest_list_size <= 0) then break end
 
-        local conf_list, reward_conf, is_reward_max_quantity = nil, nil, nil
-        if (category == RECRUITMENT_LOBBY) then conf_list = config.lobby_member_quest_filters 
+        local filter, reward_filter, is_custom_mode = nil, nil, nil
+        if (category == RECRUITMENT_LOBBY) then filter = config.lobby_member_quest_filters 
         else
-            conf_list   = config.general_filters
-            reward_conf = config.item_filters
-            if reward_conf.enabled then is_reward_max_quantity = (reward_conf.mode == "Max Quantity") end
+            filter        = config.general_filters
+            reward_filter = config.item_filters
+            if reward_filter.enabled then is_custom_mode = (reward_filter.mode == "Custom") end
         end
 
         for i = quest_list_size - 1, 0, -1 do
@@ -1360,7 +1421,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
             if quest_data then
                 local should_remove = false
                 for _, filter_name in ipairs(filter_order) do
-                    local filter_config = conf_list[filter_name] or (((filter_name == "item_reward_custom") and (not is_reward_max_quantity)) and reward_conf)
+                    local filter_config = filter[filter_name] or (((filter_name == "item_reward_custom") and is_custom_mode) and reward_filter)
                     if filter_config and filter_config.enabled then
                         local filter_method = filter_methods[filter_name]
                         if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
@@ -1370,8 +1431,12 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
             end
         end
 
-        if not is_reward_max_quantity then break end
-        filter_methods["item_reward_max_quantity"](quest_list, reward_conf.max_quantity.target_item)
+        if reward_filter.enabled and not is_custom_mode then
+            if (reward_filter.mode == "Max Quantity") then filter_methods["item_reward_max_quantity"](quest_list, reward_filter.max_quantity.target_item)
+            else                                           filter_methods["item_reward_target_reward_filter"](quest_list, reward_filter.target_reward_filter.target_item)
+                                                           pre_hook_result = sdk.PreHookResult.SKIP_ORIGINAL
+            end
+        end
     until true
     if keep_searching.enabled then
         if (quest_list:get_Count() == 0) and (quest_list_parts:get_ViewCategory() == SERCH_RESCUE_SIGNAL) then 
@@ -1382,7 +1447,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
             keep_searching.stop()
         end
     end
-return sdk.PreHookResult.CALL_ORIGINAL end)
+return pre_hook_result end)
 
 sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("setQuestListInCategory(app.GUI050000.CATEGORY)"), function(args)
     local category = sdk.to_int64(args[3])
