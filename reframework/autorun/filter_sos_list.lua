@@ -4,9 +4,6 @@ local MOD_TITLE <const>   = "Filter SOS List"
 local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
 
-local MyMod
-xpcall(function() MyMod = require("_MyModules") end, function() MyMod = { addLog = log.debug, addInfo = log.info, addError = log.error, addWarn = log.warn } end)
-
 local cursor_helper 
 xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
         if reframework:is_drawing_ui() or not is_window_open then return end
@@ -184,7 +181,6 @@ local ITEM_NAME_MAP <const> = {
 }
 
 local GEM_ID_LIST <const>            = { "36", "91", "333", "350", "387", "423", "436", "451", "464", "485", "533", "567", "105", "704", "559", "716", "726", "553", "734" }
-
 local COMPARISON_TYPE_LIST <const>   = {  "at least",       "at most",       "exactly" }
 local COMPARISON_TYPE_LOOKUP <const> = { ["at least"] = 1, ["at most"] = 2, ["exactly"] = 3 }
 local EVALUATORS <const>             = {
@@ -750,9 +746,9 @@ local function draw_slider_range_int(id, current_min, current_max)
         local window_size  = imgui.get_window_size()
               slider_width = window_size.x - 24
     end
-    local cursor_pos    = imgui.get_cursor_screen_pos()
-          cursor_pos.x  = cursor_pos.x + 10
-    local display_text  = string.format("%4d  <  Host " .. id .. "  <  %4d", current_min, current_max)
+    local cursor_pos   = imgui.get_cursor_screen_pos()
+          cursor_pos.x = cursor_pos.x + 10
+    local display_text = string.format("%4d  <  Host " .. id .. "  <  %4d", current_min, current_max)
     if (pre_display_text ~= display_text) then 
         text_size        = imgui.calc_text_size(display_text) 
         pre_display_text = display_text
@@ -1134,7 +1130,7 @@ local function draw_mod_settings()
             for item_id, item_num in pairs(filter.target_list) do
                 if item_num then
                     if imgui.button("-##item_filter_Remove_" .. item_id, { 24, 24 }) then 
-                        filter.target_list[item_id] = false -- tgaprk
+                        filter.target_list[item_id] = false
                         filtering.update()
                     end
                     imgui.same_line()
