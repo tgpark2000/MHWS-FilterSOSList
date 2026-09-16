@@ -1431,7 +1431,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
             end
         end
 
-        if reward_filter.enabled and not is_custom_mode then
+        if reward_filter and reward_filter.enabled and not is_custom_mode then
             if (reward_filter.mode == "Max Quantity") then filter_methods["item_reward_max_quantity"](quest_list, reward_filter.max_quantity.target_item)
             else                                           filter_methods["item_reward_target_reward_filter"](quest_list, reward_filter.target_reward_filter.target_item)
                                                            pre_hook_result = sdk.PreHookResult.SKIP_ORIGINAL
@@ -1460,10 +1460,12 @@ sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):g
 sdk.hook(sdk.find_type_definition("app.cGUI050000ViewFlow.Flow.RescueSetting"):get_method("cancelFlow()"),   function(args) keep_searching.stop()       return sdk.PreHookResult.CALL_ORIGINAL end)
 sdk.hook(sdk.find_type_definition("app.GUI050000"):get_method("openDialog_faildSearchQuest(System.Action)"), function(args)
     if not config.enabled or not keep_searching.enabled then return sdk.PreHookResult.CALL_ORIGINAL end
-    keep_searching.is_open_dialog_failed_search = true
     local gui     = sdk.to_managed_object(args[2])
     local context = gui:get_ViewFlowContext()
-    keep_searching.search_again(context)
+    if (context.QuestCategory == SERCH_RESCUE_SIGNAL) then 
+        keep_searching.is_open_dialog_failed_search = true
+        keep_searching.search_again(context)
+    end
 return sdk.PreHookResult.CALL_ORIGINAL end)
 
 sdk.hook(sdk.find_type_definition("app.cGUISystemModuleNotifyWindowApp"):get_method("openGUI()"), function(args)
