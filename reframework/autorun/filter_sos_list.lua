@@ -321,7 +321,8 @@ function ITEM_FILTERS.CUSTOM_MODE.update()
     end
 end
 
-local UI_WIDTH = {
+local UI_TEXT_SIZE = {}
+local UI_WIDTH     = {
     enemy_species         = 60,
     comparison_types      = 30,
     multiplay_types       = 60,
@@ -591,7 +592,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         return true
     end,
     ["current_players"] = function(quest_data, filter) 
-        local session_data   = quest_data.Session
+        local session_data    = quest_data.Session
         local current_players = session_data:get_MemberNum()
         local comparison      = filter.comparison or COMPARISON_TYPE_LIST[3]
         local evaluator       = EVALUATORS[comparison]
@@ -738,8 +739,6 @@ local active_handle    = nil
 local slider_width     = 370
 local slider_height    = 4
 local handle_size      = Vector2f.new(12, 16)
-local pre_display_text = nil
-local text_size        = 0
 local function draw_slider_range_int(id, current_min, current_max)
     if not id then id = "HR" end
     if is_window_open then
@@ -749,10 +748,8 @@ local function draw_slider_range_int(id, current_min, current_max)
     local cursor_pos   = imgui.get_cursor_screen_pos()
           cursor_pos.x = cursor_pos.x + 10
     local display_text = string.format("%4d  <  Host " .. id .. "  <  %4d", current_min, current_max)
-    if (pre_display_text ~= display_text) then 
-        text_size        = imgui.calc_text_size(display_text) 
-        pre_display_text = display_text
-    end
+    if not UI_TEXT_SIZE[display_text] then UI_TEXT_SIZE[display_text] = imgui.calc_text_size(display_text) end
+    local text_size     = UI_TEXT_SIZE[display_text]
     local text_center_x = cursor_pos.x + (slider_width / 2) - (text_size.x / 2)
     local saved_cursor  = imgui.get_cursor_pos() 
     imgui.set_cursor_screen_pos(Vector2f.new(text_center_x, cursor_pos.y))
@@ -1291,7 +1288,8 @@ local window_width
 local function center_text(text, font_size, color)
     if font_size then imgui.push_font_size(font_size) end
     
-    local text_width  = imgui.calc_text_size(text).x
+    if not UI_TEXT_SIZE[text] then UI_TEXT_SIZE[text] = imgui.calc_text_size(text) end
+    local text_width  = UI_TEXT_SIZE[text].x
     local current_pos = imgui.get_cursor_pos()
     local target_x    = (window_width - text_width) * 0.5
     imgui.set_cursor_pos({ target_x, current_pos.y })
