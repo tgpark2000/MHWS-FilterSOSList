@@ -4,6 +4,9 @@ local MOD_TITLE <const>   = "Filter SOS List"
 local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
 
+local MyMod
+xpcall(function() MyMod = require("_MyModules") end, function() MyMod = { addLog = log.debug, addError = log.error, addInfo = log.info } end)
+
 local cursor_helper 
 xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
         if reframework:is_drawing_ui() or not is_window_open then return end
@@ -124,6 +127,28 @@ local config = {
             enabled = false,
             list    = { ["Plenty"] = false, ["Fallow"] = false, ["Inclemency"] = false }
         },
+        --mission_type = {
+            --enabled = false,
+            --value   = 0,
+            --list    = { ["Main Story"] = false, ["Side Story"] = false, ["Free"] = false, ["Keep Quest"] = false, ["Instant Quest"] = false, ["Event"] = false }
+        --},
+        --quest_type = { 
+            --enabled = false,
+            --value   = 0,
+        --},
+        --quest_life = {
+            --enabled    = false,
+            --value      = 0,
+            --comparison = "at least"
+        --},
+        gathering_boost = {
+            enabled = false,
+        },
+        limit_weapon = {
+            enabled = false,
+            reserve = { enabled = false },
+            list    = { ["Great Sword"] = false, ["Sword and Shield"] = false, ["Dual Blades"] = false, ["Long Sword"] = false, ["Hammer"] = false, ["Hunting Horn"] = false, ["Lance"] = false, ["Gun Lance"] = false, ["Slash Axe"] = false, ["Charge Blade"] = false, ["Insect Glaive"] = false, ["Bow"] = false, ["Heavy Bowgun"] = false, ["Light Bowgun"] = false }
+        },
     },
     item_filters = {
         enabled = false,
@@ -152,6 +177,9 @@ local config = {
             enabled = false,
         },
         blocked_users = {
+            enabled = false,
+        },
+        sos_flare_active = {
             enabled = false,
         },
     },
@@ -207,6 +235,15 @@ local ENVIRONMENT_ID_MAP <const>  = { [2] = "Plenty", [0] = "Fallow", [1] = "Inc
 local ACCEPT_MODE_LIST <const>   = {  "Auto",          "Manual" }
 local ACCEPT_MODE_LOOKUP <const> = { ["Auto"] = 1,    ["Manual"] = 2 }
 local is_auto_accept <const>     = { ["Auto"] = true, ["Manual"] = false }
+
+local MISSION_TYPE_LIST <const>   = {       "Main Story",       "Side Story",       "Free",       "Keep Quest",       "Instant Quest",         "Event" }
+local MISSION_TYPE_ID_MAP <const> = { [0] = "Main Story", [1] = "Side Story", [2] = "Free", [4] = "Keep Quest", [5] = "Instant Quest", [6] = "Event" }
+
+local QUEST_TYPE_LIST <const>   = {       "Hunting",       "Kill",       "Capture",       "Collects",       "Transport",       "Arena",       "Bossrush",       "Special" }
+local QUEST_TYPE_ID_MAP <const> = { [0] = "Hunting", [1] = "Kill", [2] = "Capture", [3] = "Collects", [4] = "Transport", [5] = "Arena", [6] = "Bossrush", [7] = "Special" }
+
+local WEAPON_LIST <const>   = {       "Great Sword",       "Sword and Shield",       "Dual Blades",       "Long Sword",       "Hammer",       "Hunting Horn",       "Lance",       "Gun Lance",       "Slash Axe",       "Charge Blade",        "Insect Glaive",        "Bow",        "Heavy Bowgun",        "Light Bowgun" }
+local WEAPON_ID_MAP <const> = { [0] = "Great Sword", [1] = "Sword and Shield", [2] = "Dual Blades", [3] = "Long Sword", [4] = "Hammer", [5] = "Hunting Horn", [6] = "Lance", [7] = "Gun Lance", [8] = "Slash Axe", [9] = "Charge Blade", [10] = "Insect Glaive", [11] = "Bow", [12] = "Heavy Bowgun", [13] = "Light Bowgun" }
 
 local NPC_ONLY <const>            = sdk.find_type_definition("app.net_quest_session.cCreateQuestSessionInfo.MULTIPLAY_SETTING"):get_field("NPC_ONLY"):get_data() or 2
 local SERCH_RESCUE_SIGNAL <const> = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("SERCH_RESCUE_SIGNAL"):get_data()
@@ -447,6 +484,11 @@ local function initialize()
 end initialize()
 sdk.hook(sdk.find_type_definition("app.GUI020001"):get_method(".ctor()"), function(args) initialize() end) 
 
+local function derefPtr(ptr)
+    local ary = sdk.to_valuetype(ptr, "System.UInt64")
+    return ary and ary:get_field("m_value")
+end
+
 local network_manager     = sdk.get_managed_singleton("app.NetworkManager")
 local context_manager     = network_manager:get_ContextManager()
 local player_platform_id  = context_manager:get_PlatformId()
@@ -462,17 +504,23 @@ local filter_order = {
     "blocked_users",
     "joinable_quest",
     "without_password",
+    "sos_flare_active",
     "monster_species",
     "quest_level",
     "host_hr",
     "quest_started_time",
     "quest_multiplay_setting",
+    --"mission_type",
+    --"quest_type",
+    --"quest_life",
+    "gathering_boost",
     "wishlist",
     "monster_name",
     "monster_count",
     "monster_threat",
     "current_players",
     "max_players",
+    "limit_weapon",
     "quest_fields",
     "quest_environment",
     "item_reward_custom",
@@ -610,8 +658,8 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         return not (evaluator and evaluator(max_players, filter.value))
     end,
     ["joinable_quest"] = function(quest_data, filter) 
-        local session_data  = quest_data.Session
-        local is_full = ((session_data:get_MemberMax() - session_data:get_MemberNum()) == 0)
+        local session_data = quest_data.Session
+        local is_full = (session_data:get_MemberMax() == session_data:get_MemberNum())
         if is_full then return true end
         local search_result = session_data:get_SearchResult() 
         if (search_result.multiplaySetting == NPC_ONLY) then return true end
@@ -622,8 +670,52 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         return false
     end,
     ["without_password"] = function(quest_data, filter) 
-        local session_data  = quest_data.Session
+        local session_data = quest_data.Session
         return session_data:get_IsNeedPassword()
+    end,
+    ["sos_flare_active"] = function(quest_data, filter)
+        local session_data = quest_data.Session
+        return session_data:get_IsResucue()
+    end,
+    ["mission_type"] = function(quest_data, filter)
+        local session_data     = quest_data.Session
+        local search_result    = session_data:get_SearchResult()
+        local mission_type     = search_result:getMissionType()  -- app.MissionTypeList.TYPE,  MAINSTORY:0, SIDESTORY:1, FREEQUEST:2, KEEPQUEST:4, INSTANTQUEST:5, STREAM_EVENTQUEST:6
+        local mission_type_str = MISSION_TYPE_ID_MAP[mission_type]
+        return not filter.list[mission_type_str]
+    end,
+    ["quest_type"] = function(quest_data, filter)
+        local session_data = quest_data.Session
+        local quest_type   = session_data:get_QuestType() -- app.QuestDef.QUEST_TYPE, HUNTING = 0, KILL = 1, CAPTURE = 2, COLLECTS = 3, TRANSPORT = 4, ARENA = 5, BOSSRUSH = 6, SPECIAL = 7
+        return (quest_type ~= filter.value)
+    end,
+    ["quest_life"] = function(quest_data, filter)
+        local session_data  = quest_data.Session
+        local search_result = session_data:get_SearchResult()
+        local quest_life    = search_result.questLife
+        local comparison    = filter.comparison or COMPARISON_TYPE_LIST[1]
+        local evaluator     = EVALUATORS[comparison]
+        return not (evaluator and evaluator(quest_life, filter.value))
+    end,
+    ["gathering_boost"] = function(quest_data, filter)
+        local session_data  = quest_data.Session
+        local search_result = session_data:get_SearchResult()
+        return not search_result.isBoost
+    end,
+    ["limit_weapon"] = function(quest_data, filter)
+        local session_data    = quest_data.Session
+        local main_weapons    = session_data:get_MainWeaponType() -- app.WeaponDef.TYPE[]
+        local reserve_weapons = session_data:get_ReserveWeaponType() 
+        local is_target       = filter.list
+        local found           = false
+        for i = 0, (#main_weapons - 1) do 
+            local main_wp        = main_weapons[i].value__
+            local reserve_wp     = reserve_weapons[i].value__
+            local main_weapon    = WEAPON_ID_MAP[main_wp]
+            local reserve_weapon = WEAPON_ID_MAP[reserve_wp] -- 서브 무기를 세팅 안하는 경우를 대비 INVALID: -1, 대검: 0, 한손검:1, 쌍검:2, 태도:3, 해머:4, 피리:5, 랜스:6, 건랜스:7, 슬래시엑스:8, 차지엑스:9, 조충곤:10, 활:11, 헤비보우건:12, 라이트보우건:13
+            if (is_target[main_weapon] or (filter.reserve.enabled and is_target[reserve_weapon])) then found = true; break end
+        end
+        return found
     end,
     ["item_reward_custom"] = function(quest_data, filter)
         local reward_table     = {}
@@ -739,7 +831,7 @@ end
 local function draw_settings_text_input(setting_name, filter, min, max, default)
     local width = imgui.calc_text_size(tostring(max)).x + 10
     imgui.push_item_width(width)
-    local changed, value = imgui.input_text("##filter_sos_list_" .. setting_name, filter.value, default)
+    local changed, value = imgui.input_text("##filter_sos_list_" .. setting_name, filter.value, 4097)  -- Chars Decimal: 1, Auto Select All: 4096
     local value = tonumber(value) or default
     if changed and (value >= min) and (value <= max) then filter.value = value end
     imgui.pop_item_width()
@@ -983,6 +1075,22 @@ local function draw_mod_settings()
         end
         imgui.unindent(30)
         imgui.end_disabled()
+        -- Misstion Type --------------------------------------------------------------------------------------------------------------------------------------
+        --filter = filters.mission_type
+        --imgui.indent(10); draw_settings_checkbox("misstion_type", filter); imgui.unindent(10)
+        --imgui.begin_disabled(not filter.enabled)
+        --imgui.same_line()
+        --imgui.text("Show only selected quest types")
+
+        --imgui.end_disabled()
+        -- Quest Type -----------------------------------------------------------------------------------------------------------------------------------------
+        --filter = filters.quest_type
+        --imgui.indent(10); draw_settings_checkbox("quest_type", filter); imgui.unindent(10)
+        --imgui.begin_disabled(not filter.enabled)
+        --imgui.same_line()
+        --imgui.text("Show only selected quest objectives")
+
+        --imgui.end_disabled()
         -- Monster Species ------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_species
         imgui.indent(10); draw_settings_checkbox("filter_monster_species", filter); imgui.unindent(10)
@@ -1048,6 +1156,47 @@ local function draw_mod_settings()
         draw_settings_text_input("max_players_filter", filter, 2, 4, 2)
         imgui.same_line()
         imgui.text("max players ")
+        imgui.end_disabled()
+        -- Gathering Boost Quest ------------------------------------------------------------------------------------------------------------------------------
+        filter = filters.gathering_boost
+        imgui.indent(10); draw_settings_checkbox("gathering_boost", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
+        imgui.same_line()
+        imgui.text("Show only quests with active gathering boosts")
+        imgui.end_disabled()
+        -- Limit Weapons---------------------------------------------------------------------------------------------------------------------------------------
+        filter = filters.limit_weapon
+        imgui.indent(10); draw_settings_checkbox("limit_weapon", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
+        imgui.same_line()
+        imgui.text("Show only quests without selected weapons equipped")
+        if filter.enabled then
+            imgui.indent(20); draw_settings_checkbox("limit_weapon_reserve", filter.reserve); imgui.unindent(20)
+            imgui.same_line()
+            imgui.text("Apply filter to secondary weapons as well")
+        end
+        imgui.indent(30)
+        local equipped_weapons_str = nil
+              remaining_count      = nil
+        for _, weapon in ipairs(WEAPON_LIST) do
+            if filter.list[weapon] then
+                if not remaining_count then
+                    local next_str = (equipped_weapons_str and equipped_weapons_str .. "," or "") .. get_localized_text(weapon)
+                    if (imgui.calc_text_size(next_str).x > 300) then remaining_count      = 1
+                    else                                             equipped_weapons_str = next_str end
+                else
+                    remaining_count = remaining_count + 1
+                end
+            end
+        end
+        if     remaining_count                                          then equipped_weapons_str = equipped_weapons_str .. " and  +" .. tostring(remaining_count) .. " more"
+        elseif not equipped_weapons_str or (equipped_weapons_str == "") then equipped_weapons_str = "<No Weapon Selected>"                                                    end
+        local new_index = draw_settings_menu(equipped_weapons_str, filter, WEAPON_LIST, 0, true)
+        if new_index then 
+            local weapon        = WEAPON_LIST[new_index]
+            filter.list[weapon] = not filter.list[weapon]
+        end
+        imgui.unindent(30)
         imgui.end_disabled()
         -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.blocked_users
@@ -1283,6 +1432,13 @@ local function draw_mod_settings()
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
         imgui.text("Hide Quests with Blocked Users")
+        imgui.end_disabled()
+        --- sos flare active -------------------------------------------------------------------------------------------------------------------------------------
+        filter = filters.sos_flare_active
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_sos_flare_active", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
+        imgui.same_line()
+        imgui.text("Hide Quests with SOS Flares Active")
         imgui.end_disabled()
     end
     -- Mouse Cursor -------------------------------------------------------------------------------------------------------------------------------------------
