@@ -106,7 +106,7 @@ local config = {
         },        
         quest_join_approval = {
             enabled = true,
-            value   = "Auto",
+            value   = "Auto-accept",
         },
         quest_started_time = {
             enabled = false,
@@ -114,7 +114,7 @@ local config = {
         },
         quest_multiplay_setting = {
             enabled = false,
-            value   = "Player & NPCs",
+            value   = "Players & Support Hunters",
         },
         quest_fields = {
             enabled = false,
@@ -127,17 +127,8 @@ local config = {
         mission_type = {
             enabled = false,
             value   = 0,
-            list    = { ["Assignments"] = false, ["Optional Quests"] = false, ["Investigations"] = false, ["Event Quests"] = false }
+            list    = { ["Assignments"] = false, ["Optional Quests"] = false, ["Investigations"] = false, ["Event Quests"] = false },
         },
-        -- quest_type = { 
-        --     enabled = false,
-        --     value   = 0,
-        -- },
-        -- quest_life = {
-        --     enabled    = false,
-        --     value      = 0,
-        --     comparison = "at least"
-        -- },
         gathering_boost = {
             enabled = false,
         },
@@ -168,7 +159,7 @@ local config = {
         },
         quest_join_approval = {
             enabled = false,
-            value   = "Auto",
+            value   = "Auto-accept",
         },
         joinable_quest = {
             enabled = false,
@@ -217,8 +208,8 @@ local EVALUATORS <const>             = {
     ["exactly"]  = function(current, required) return (current == required) end,
 }
 
-local MULTIPLAY_TYPE_LIST <const>   = {  "Players & NPCs",       "Players" }
-local MULTIPLAY_TYPE_LOOKUP <const> = { ["Players & NPCs"] = 1, ["Players"] = 2 }
+local MULTIPLAY_TYPE_LIST <const>   = {  "Players & Support Hunters",       "Only Players" }
+local MULTIPLAY_TYPE_LOOKUP <const> = { ["Players & Support Hunters"] = 1, ["Only Players"] = 2 }
 
 local FILTER_MODE_LIST <const>   = {  "Custom",       "Max Quantity",       "Target Reward Filter" }
 local FILTER_MODE_LOOKUP <const> = { ["Custom"] = 1, ["Max Quantity"] = 2, ["Target Reward Filter"] = 3 }
@@ -229,9 +220,9 @@ local FIELD_ID_MAP <const> = { [0] = "Plains", [1] = "Forest", [2] = "Basin", [3
 local ENVIRONMENT_LIST <const>    = {       "Plenty",       "Fallow",       "Inclemency" }
 local ENVIRONMENT_ID_MAP <const>  = { [2] = "Plenty", [0] = "Fallow", [1] = "Inclemency" }
 
-local ACCEPT_MODE_LIST <const>   = {  "Auto",          "Manual" }
-local ACCEPT_MODE_LOOKUP <const> = { ["Auto"] = 1,    ["Manual"] = 2 }
-local is_auto_accept <const>     = { ["Auto"] = true, ["Manual"] = false }
+local ACCEPT_MODE_LIST <const>   = {  "Auto-accept",          "Manual Accept" }
+local ACCEPT_MODE_LOOKUP <const> = { ["Auto-accept"] = 1,    ["Manual Accept"] = 2 }
+local is_auto_accept <const>     = { ["Auto-accept"] = true, ["Manual Accept"] = false, ["Auto"] = true, ["Manula"] = false }
 
 local MISSION_TYPE_LIST <const>   = {       "Assignments",                            "Optional Quests",       "Investigations",                               "Event Quests" }
 local MISSION_TYPE_ID_MAP <const> = { [0] = "Assignments", [1] = "Assignments", [2] = "Optional Quests", [4] = "Investigations", [5] = "Investigations", [6] = "Event Quests" }
@@ -246,59 +237,69 @@ local NPC_ONLY <const>            = sdk.find_type_definition("app.net_quest_sess
 local SERCH_RESCUE_SIGNAL <const> = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("SERCH_RESCUE_SIGNAL"):get_data()
 local RECRUITMENT_LOBBY <const>   = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("RECRUITMENT_LOBBY"):get_data()
 
-local LOCALIZED_TEXT_MAP = {}
+local LOCALIZED_TEXT = {
+    MAP = {},
+    MULTIPLAY_TYPES = {},
+    ACCEPT_MODE = {},
+}
 local GUID_MAP <const>   = {
-    ["Plains"]                  = "e232918e-ee5a-4723-9618-ad8799eb8dc1",
-    ["Forest"]                  = "ce61d1bb-48ba-4256-b321-a98c7699abd0",
-    ["Basin"]                   = "7cd70789-f7e1-439f-adb5-dcc84155329c",
-    ["Cliffs"]                  = "05c57b50-8a37-45d8-8270-d0b7d9e26d41",
-    ["Wyveria"]                 = "edf6ca79-4396-4fc2-a9bf-ecddbb41020f",
-    ["Wounded Hollow"]          = "96c9fa8f-0ac2-4351-a636-363fef236722",
-    ["Rimechain Peak"]          = "bf7c1e0b-41ef-4a42-bbdb-b8cbb56089fa",
-    ["Dragontorch Shrine"]      = "e1d6d887-5bb9-4246-b08c-eb540a49947f",
-    ["Forgotten Machineworks"]  = "8c000ff9-6104-47c4-a616-af6a7510b6fd",
-    ["Plenty"]                  = "1652ff9a-674d-4432-a348-25c28375602a", -- 풍요기
-    ["Fallow"]                  = "4756804f-e6cb-4b8f-8f87-7357b0087c76", -- 황폐기
-    ["Inclemency"]              = "7b5b392e-4e61-4f21-9ad6-9b50711d879c", -- 기상 이변
-    ["Frostwinds"]              = "d68c3291-b596-461e-a0a1-349803c0a624", -- 눈보라
-    ["Downpour"]                = "e0de3c96-94e6-446f-9069-aec17647567e", -- 집중 호우
-    ["Sandtide"]                = "7f8e18c7-dfbd-43df-96db-340f0f902da9", -- 모래 폭풍
-    ["Assignments"]             = "e284bb17-5832-4884-9e97-b27935d895cd", -- 임무 퀘스트
-    ["Optional Quests"]         = "2092b44c-6ca1-4739-8c15-de9ff059bf1f", -- 자유 퀘스트
-    ["Investigations"]          = "6a5c2dbb-e2ac-4c14-8dce-9f2cc7845e9e", -- 조사 퀘스트
-    ["Event Quests"]            = "85173188-e304-4770-bf5f-a31f44001ee3", -- 이벤트 퀘스트
-    ["Challenge Quests"]        = "3e7f2b1c-6558-4378-87ef-54c5ad20b4c6", -- 챌린지 퀘스트
-    ["Free Challenge Quests"]   = "c7881ddd-164d-4ece-ad22-46bd6029ee5a", -- 프리 챌린지 퀘스트
-    ["Arena Quests"]            = "b9a42b39-a410-4aa8-9c0f-f869d810c93e", -- 격투대회 퀘스트
-    ["All Quests"]              = "c089ea63-5a87-49d4-a553-b23173521043", -- 모든 퀘스트
-    ["Any"]                     = "8fee14a2-10f0-41a2-8c40-72a029623bbc", -- 지정 없음
-    ["SOS Flare Quests"]        = "d22d376c-e3df-413e-92ff-0a28be9ab6e8",
-    ["Lobby Member Quests"]     = "4f2f9156-b1ae-4f76-bc6e-274b4d0e163b",
-    ["Great Sword"]             = "7c666d48-f75d-4d29-99d3-8ae10938d756",
-    ["Sword & Shield"]          = "e757291a-478a-4206-8e61-2831732ee767",
-    ["Dual Blades"]             = "5df72c46-ccf7-4a74-86fd-528a3de404d4",
-    ["Long Sword"]              = "a8d7c0e5-bd89-4fff-9635-19d41b3a5918",
-    ["Hammer"]                  = "744ba34b-307a-478c-b099-35af9d8a5e8f",
-    ["Hunting Horn"]            = "b7fe4885-237b-41ce-94f2-95c596398cfc",
-    ["Lance"]                   = "b835789c-ea15-47d1-886c-91439e661418",
-    ["Gunlance"]                = "0c474220-8d71-443b-8dca-f4aa007e29b9",
-    ["Switch Axe"]              = "b1048d25-68dd-48c3-9136-bbd8ee44f2ef",
-    ["Charge Blade"]            = "e9fbacb9-386f-4c9b-b084-7827d42301ad",
-    ["Insect Glaive"]           = "204eafea-efcc-487e-ba57-b488dcbd91f9",
-    ["Bow"]                     = "e69753e3-a107-4a2e-bd8f-76dbe07efffe",
-    ["Heavy Bowgun"]            = "fef6ef0a-6cdb-40c6-a3b4-0c0a5c4b284c",
-    ["Light Bowgun"]            = "a664bfb1-a953-4adf-80f3-582e464be294",
-    ["High Rank"]               = "5238ed96-3c55-402c-8f7a-088df7077136", -- 상위
-    ["Low Rank"]                = "35fbf6f0-8536-4319-a6d7-3f5dce0b1053", -- 하위
-    ["Hunting"]                 = "88baa0c8-ecc8-434b-8bf2-e860a12aab69", -- 사냥
-    ["Capture"]                 = "bb0174eb-5e48-4d32-a1b5-d9ae5b9e0ffc", -- 포획
-    ["Slaying"]                 = "151de205-ff53-483d-bc1c-ce4ca1599d04", -- 토벌
-    ["Transport"]               = "e1df9ca2-83d2-4b07-bfa4-ebccffcfe1e5", -- 운반
-    ["Special"]                 = "45fb167b-dd18-4d64-9e72-77aae2bbeed0", -- 특수
+    ["Plains"]                    = "e232918e-ee5a-4723-9618-ad8799eb8dc1",
+    ["Forest"]                    = "ce61d1bb-48ba-4256-b321-a98c7699abd0",
+    ["Basin"]                     = "7cd70789-f7e1-439f-adb5-dcc84155329c",
+    ["Cliffs"]                    = "05c57b50-8a37-45d8-8270-d0b7d9e26d41",
+    ["Wyveria"]                   = "edf6ca79-4396-4fc2-a9bf-ecddbb41020f",
+    ["Wounded Hollow"]            = "96c9fa8f-0ac2-4351-a636-363fef236722",
+    ["Rimechain Peak"]            = "bf7c1e0b-41ef-4a42-bbdb-b8cbb56089fa",
+    ["Dragontorch Shrine"]        = "e1d6d887-5bb9-4246-b08c-eb540a49947f",
+    ["Forgotten Machineworks"]    = "8c000ff9-6104-47c4-a616-af6a7510b6fd",
+    ["Plenty"]                    = "1652ff9a-674d-4432-a348-25c28375602a", -- 풍요기
+    ["Fallow"]                    = "4756804f-e6cb-4b8f-8f87-7357b0087c76", -- 황폐기
+    ["Inclemency"]                = "7b5b392e-4e61-4f21-9ad6-9b50711d879c", -- 기상 이변
+    ["Frostwinds"]                = "d68c3291-b596-461e-a0a1-349803c0a624", -- 눈보라
+    ["Downpour"]                  = "e0de3c96-94e6-446f-9069-aec17647567e", -- 집중 호우
+    ["Sandtide"]                  = "7f8e18c7-dfbd-43df-96db-340f0f902da9", -- 모래 폭풍
+    ["Assignments"]               = "e284bb17-5832-4884-9e97-b27935d895cd", -- 임무 퀘스트
+    ["Optional Quests"]           = "2092b44c-6ca1-4739-8c15-de9ff059bf1f", -- 자유 퀘스트
+    ["Investigations"]            = "6a5c2dbb-e2ac-4c14-8dce-9f2cc7845e9e", -- 조사 퀘스트
+    ["Event Quests"]              = "85173188-e304-4770-bf5f-a31f44001ee3", -- 이벤트 퀘스트
+    ["Challenge Quests"]          = "3e7f2b1c-6558-4378-87ef-54c5ad20b4c6", -- 챌린지 퀘스트
+    ["Free Challenge Quests"]     = "c7881ddd-164d-4ece-ad22-46bd6029ee5a", -- 프리 챌린지 퀘스트
+    ["Arena Quests"]              = "b9a42b39-a410-4aa8-9c0f-f869d810c93e", -- 격투대회 퀘스트
+    ["All Quests"]                = "c089ea63-5a87-49d4-a553-b23173521043", -- 모든 퀘스트
+    ["Any"]                       = "8fee14a2-10f0-41a2-8c40-72a029623bbc", -- 지정 없음
+    ["SOS Flare Quests"]          = "d22d376c-e3df-413e-92ff-0a28be9ab6e8",
+    ["Bonus Rewards"]             = "346221cc-93a1-43d8-8f74-ae437c2ea9c8",
+    ["Lobby Member Quests"]       = "4f2f9156-b1ae-4f76-bc6e-274b4d0e163b",
+    ["Great Sword"]               = "7c666d48-f75d-4d29-99d3-8ae10938d756",
+    ["Sword & Shield"]            = "e757291a-478a-4206-8e61-2831732ee767",
+    ["Dual Blades"]               = "5df72c46-ccf7-4a74-86fd-528a3de404d4",
+    ["Long Sword"]                = "a8d7c0e5-bd89-4fff-9635-19d41b3a5918",
+    ["Hammer"]                    = "744ba34b-307a-478c-b099-35af9d8a5e8f",
+    ["Hunting Horn"]              = "b7fe4885-237b-41ce-94f2-95c596398cfc",
+    ["Lance"]                     = "b835789c-ea15-47d1-886c-91439e661418",
+    ["Gunlance"]                  = "0c474220-8d71-443b-8dca-f4aa007e29b9",
+    ["Switch Axe"]                = "b1048d25-68dd-48c3-9136-bbd8ee44f2ef",
+    ["Charge Blade"]              = "e9fbacb9-386f-4c9b-b084-7827d42301ad",
+    ["Insect Glaive"]             = "204eafea-efcc-487e-ba57-b488dcbd91f9",
+    ["Bow"]                       = "e69753e3-a107-4a2e-bd8f-76dbe07efffe",
+    ["Heavy Bowgun"]              = "fef6ef0a-6cdb-40c6-a3b4-0c0a5c4b284c",
+    ["Light Bowgun"]              = "a664bfb1-a953-4adf-80f3-582e464be294",
+    ["High Rank"]                 = "5238ed96-3c55-402c-8f7a-088df7077136", -- 상위
+    ["Low Rank"]                  = "35fbf6f0-8536-4319-a6d7-3f5dce0b1053", -- 하위
+    ["Hunting"]                   = "88baa0c8-ecc8-434b-8bf2-e860a12aab69", -- 사냥
+    ["Capture"]                   = "bb0174eb-5e48-4d32-a1b5-d9ae5b9e0ffc", -- 포획
+    ["Slaying"]                   = "151de205-ff53-483d-bc1c-ce4ca1599d04", -- 토벌
+    ["Transport"]                 = "e1df9ca2-83d2-4b07-bfa4-ebccffcfe1e5", -- 운반
+    ["Special"]                   = "45fb167b-dd18-4d64-9e72-77aae2bbeed0", -- 특수
+    ["Players & Support Hunters"] = "62839405-8576-472c-b13e-68f1db6fdb42",
+    ["Only Players"]              = "2ecc4714-89a1-427f-a444-459e52aa98dd",
+    ["Auto-accept"]               = "1979acd2-c49a-4f58-b70e-b01105e00aaa",
+    ["Manual Accept"]             = "b21e9a7e-5870-4d50-98db-25a6e25f3c80",
+    ["gathering boost"]           = "47e87983-6e7c-44dd-b3b2-f1cac33cd4a2",
 }
 
 local function get_localized_text(key)
-    local text = LOCALIZED_TEXT_MAP[key]
+    local text = LOCALIZED_TEXT.MAP[key]
     if text then return text end
 
     if (type(key) == "string") then  -- Maybe guid-string
@@ -314,10 +315,10 @@ local function get_localized_text(key)
         text = get_item_name:call(nil, key)
         if not text then return key end
 
-        LOCALIZED_TEXT_MAP[ITEM_ID_MAP[tostring(key)]] = text    
+        LOCALIZED_TEXT.MAP[ITEM_ID_MAP[tostring(key)]] = text    
     end
 
-    LOCALIZED_TEXT_MAP[key] = text
+    LOCALIZED_TEXT.MAP[key] = text
     return text
 end
 
@@ -363,6 +364,17 @@ function ENEMY_BOSS.update()
         until true
     end
     return (width + 30)
+end
+
+local function setup_localized_text()
+    LOCALIZED_TEXT.MULTIPLAY_TYPES = {}
+    for _, text in ipairs(MULTIPLAY_TYPE_LIST) do 
+        table.insert(LOCALIZED_TEXT.MULTIPLAY_TYPES, get_localized_text(text))
+    end
+    LOCALIZED_TEXT.ACCEPT_MODE = {}
+    for _, text in ipairs(ACCEPT_MODE_LIST) do 
+        table.insert(LOCALIZED_TEXT.ACCEPT_MODE, get_localized_text(text))
+    end
 end
 
 local ITEM_FILTERS ={
@@ -412,14 +424,14 @@ function UI_WIDTH.update()
     UI_WIDTH.comparison_types = width + 30
 
     width = 0
-    for i, text in pairs(MULTIPLAY_TYPE_LIST) do 
+    for i, text in pairs(LOCALIZED_TEXT.MULTIPLAY_TYPES) do 
         local size = imgui.calc_text_size(text).x
         if (size > width) then width = size end
     end
     UI_WIDTH.multiplay_types = width + 30
 
     width = 0
-    for i, text in pairs(ACCEPT_MODE_LIST) do 
+    for i, text in pairs(LOCALIZED_TEXT.ACCEPT_MODE) do 
         local size = imgui.calc_text_size(text).x
         if (size > width) then width = size end
     end
@@ -507,10 +519,11 @@ local function load_config()
 end 
 
 local function initialize()  
-    LOCALIZED_TEXT_MAP     = {}  -- 옵션의 문자 언어 설정 변경하는 경우를 대비해서 항상 초기화한다.
+    LOCALIZED_TEXT.MAP     = {}  -- 옵션의 문자 언어 설정 변경하는 경우를 대비해서 항상 초기화한다.
     UI_WIDTH.enemy_species = ENEMY_BOSS.update()
 
     load_config()
+    setup_localized_text()
     UI_WIDTH.update()
     ITEM_FILTERS.CUSTOM_MODE.update()
 end initialize()
@@ -538,8 +551,6 @@ local filter_order = {
     "quest_started_time",
     "quest_multiplay_setting",
     "mission_type",
-    --"quest_type",
-    --"quest_life",
     "gathering_boost",
     "wishlist",
     "monster_name",
@@ -1013,7 +1024,7 @@ local function draw_mod_settings()
     imgui.separator()
     draw_settings_checkbox("sos_flare_quests_filter", filters)
     imgui.same_line()
-    imgui.text(get_localized_text("SOS Flare Quests") .. " Filter")
+    imgui.text(get_localized_text("SOS Flare Quests"))
     imgui.same_line()
     if not filters.enabled then imgui.text_colored("Disabled", -16776961)
     else                        imgui.text_colored("Enabled",  -16711936)
@@ -1026,11 +1037,9 @@ local function draw_mod_settings()
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.accept_modes)
         local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
-        local changed, new_index  = imgui.combo("##filter_sos_list_accept_setting", accept_option_index, ACCEPT_MODE_LIST)
+        local changed, new_index  = imgui.combo("##filter_sos_list_accept_setting", accept_option_index, LOCALIZED_TEXT.ACCEPT_MODE)
         if changed then filter.value = ACCEPT_MODE_LIST[new_index] end
         imgui.pop_item_width()
-        imgui.same_line()
-        imgui.text("join approval ")
         imgui.end_disabled()
         -- Quest Level ----------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_level
@@ -1130,14 +1139,6 @@ local function draw_mod_settings()
             filter.list[mission_type] = not filter.list[mission_type]
         end
         imgui.end_disabled()
-        -- Quest Type -----------------------------------------------------------------------------------------------------------------------------------------
-        -- filter = filters.quest_type
-        -- imgui.indent(10); draw_settings_checkbox("quest_type", filter); imgui.unindent(10)
-        -- imgui.begin_disabled(not filter.enabled)
-        -- imgui.same_line()
-        -- imgui.text("Show only selected quest objectives")
-        -- [[ ...... ]]
-        -- imgui.end_disabled()
         -- Monster Species ------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_species
         imgui.indent(10); draw_settings_checkbox("filter_monster_species", filter); imgui.unindent(10)
@@ -1204,13 +1205,6 @@ local function draw_mod_settings()
         imgui.same_line()
         imgui.text("max players ")
         imgui.end_disabled()
-        -- Gathering Boost Quest ------------------------------------------------------------------------------------------------------------------------------
-        filter = filters.gathering_boost
-        imgui.indent(10); draw_settings_checkbox("gathering_boost", filter); imgui.unindent(10)
-        imgui.begin_disabled(not filter.enabled)
-        imgui.same_line()
-        imgui.text("Show only quests with active gathering boosts")
-        imgui.end_disabled()
         -- Limit Weapons---------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.limit_weapon
         imgui.indent(10); draw_settings_checkbox("limit_weapon", filter); imgui.unindent(10)
@@ -1249,13 +1243,6 @@ local function draw_mod_settings()
         end
         imgui.unindent(30)
         imgui.end_disabled()
-        -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
-        filter = filters.blocked_users
-        imgui.indent(10); draw_settings_checkbox("filter_blocked_users", filter); imgui.unindent(10)
-        imgui.begin_disabled(not filter.enabled)
-        imgui.same_line()
-        imgui.text("Hide Quests with Blocked Users")
-        imgui.end_disabled()
         -- Started Time ---------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_started_time
         imgui.indent(10); draw_settings_checkbox("filter_started_time", filter); imgui.unindent(10)
@@ -1276,7 +1263,7 @@ local function draw_mod_settings()
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.multiplay_types)
         local multiplay_index = MULTIPLAY_TYPE_LOOKUP[filter.value] or 1
-        local changed, new_index = imgui.combo("##filter_sos_list_multiplay_setting_filter", multiplay_index, MULTIPLAY_TYPE_LIST)
+        local changed, new_index = imgui.combo("##filter_sos_list_multiplay_setting_filter", multiplay_index, LOCALIZED_TEXT.MULTIPLAY_TYPES)
         imgui.pop_item_width()
         if changed then filter.value = MULTIPLAY_TYPE_LIST[new_index] end
         imgui.end_disabled()
@@ -1343,12 +1330,26 @@ local function draw_mod_settings()
         imgui.same_line()
         imgui.text("Show only quests with wishlisted monster drops ")
         imgui.end_disabled()
+        -- Gathering Boost Quest ------------------------------------------------------------------------------------------------------------------------------
+        filter = filters.gathering_boost
+        imgui.indent(10); draw_settings_checkbox("gathering_boost", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
+        imgui.same_line()
+        imgui.text("Show only quests with \"" .. get_localized_text("gathering boost") .. "\"")
+        imgui.end_disabled()
+        -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
+        filter = filters.blocked_users
+        imgui.indent(10); draw_settings_checkbox("filter_blocked_users", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
+        imgui.same_line()
+        imgui.text("Hide Quests with Blocked Users")
+        imgui.end_disabled()
     end
     -- Item Filters -------------------------------------------------------------------------------------------------------------------------------------------
     filter = config.item_filters
     draw_settings_checkbox("item_filters_enabled", filter)
     imgui.same_line()
-    imgui.text("Bonus Rewards Filter")
+    imgui.text(get_localized_text("Bonus Rewards"))
     imgui.same_line()
 
     if not filter.enabled then imgui.text_colored("Disabled", -16776961)
@@ -1444,17 +1445,10 @@ local function draw_mod_settings()
     imgui.separator()
     draw_settings_checkbox("general_lobby_member_filters", filters)
     imgui.same_line()
-    imgui.text(get_localized_text("Lobby Member Quests") .. " Filter")
+    imgui.text(get_localized_text("Lobby Member Quests"))
     imgui.same_line()
     if not filters.enabled then imgui.text_colored("Disabled", -16776961)
     else                        imgui.text_colored("Enabled",  -16711936)
-        -- without a password ---------------------------------------------------------------------------------------------------------------------------------
-        filter = filters.without_password
-        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", filter); imgui.unindent(10)
-        imgui.begin_disabled(not filter.enabled)
-        imgui.same_line()
-        imgui.text("Show only quests without a password")
-        imgui.end_disabled()
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_join_approval
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_accept_setting", filter); imgui.unindent(10)
@@ -1464,11 +1458,16 @@ local function draw_mod_settings()
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.accept_modes)
         local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
-        local changed, new_index  = imgui.combo("##filter_lobby_member_quest_list_accept_setting", accept_option_index, ACCEPT_MODE_LIST)
+        local changed, new_index  = imgui.combo("##filter_lobby_member_quest_list_accept_setting", accept_option_index, LOCALIZED_TEXT.ACCEPT_MODE)
         if changed then filter.value = ACCEPT_MODE_LIST[new_index] end
         imgui.pop_item_width()
+        imgui.end_disabled()
+        -- without a password ---------------------------------------------------------------------------------------------------------------------------------
+        filter = filters.without_password
+        imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", filter); imgui.unindent(10)
+        imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("join approval ")
+        imgui.text("Show only quests without a password")
         imgui.end_disabled()
         -- available slots ----------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.joinable_quest
