@@ -1004,20 +1004,23 @@ local function draw_button(name, size)
     return is_clicked
 end
 
+local function draw_display_enabled(isEnable)
+    if isEnable then imgui.text_colored("Enabled",  0xFF00FF00)
+    else             imgui.text_colored("Disabled", 0xFF0000FF) end
+end
+
 local function draw_mod_settings()
     imgui.spacing()
     draw_settings_checkbox("enabled", config)
     imgui.same_line()
     imgui.text("Mod")
     imgui.same_line()
-    if config.enabled then imgui.text_colored("Enabled",  -16711936)
-    else                   imgui.text_colored("Disabled", -16776961) end
-
+    draw_display_enabled(config.enabled)
     draw_settings_checkbox("keep_searching", config.keep_searching)
-    imgui.begin_disabled(not config.keep_searching.enabled)
     imgui.same_line()
     imgui.text("Keep searching for SOS Quest")
-    imgui.end_disabled()
+    imgui.same_line()
+    draw_display_enabled(config.enabled and config.keep_searching.enabled and (config.general_filters.enabled or config.item_filters.enabled))
     -- General SOS Filters ------------------------------------------------------------------------------------------------------------------------------------
     local filters = config.general_filters
     local filter
@@ -1026,8 +1029,8 @@ local function draw_mod_settings()
     imgui.same_line()
     imgui.text(get_localized_text("SOS Flare Quests"))
     imgui.same_line()
-    if not filters.enabled then imgui.text_colored("Disabled", -16776961)
-    else                        imgui.text_colored("Enabled",  -16711936)
+    draw_display_enabled(config.enabled and filters.enabled)
+    if filters.enabled then
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_join_approval
         imgui.indent(10); draw_settings_checkbox("filter_accept_setting", filter); imgui.unindent(10)
@@ -1351,9 +1354,8 @@ local function draw_mod_settings()
     imgui.same_line()
     imgui.text(get_localized_text("Bonus Rewards"))
     imgui.same_line()
-
-    if not filter.enabled then imgui.text_colored("Disabled", -16776961)
-    else                       imgui.text_colored("Enabled",  -16711936)
+    draw_display_enabled(config.enabled and filter.enabled)
+    if filter.enabled then
         imgui.indent(10)
         imgui.text("Filter Mode:")
         imgui.same_line()
@@ -1447,8 +1449,8 @@ local function draw_mod_settings()
     imgui.same_line()
     imgui.text(get_localized_text("Lobby Member Quests"))
     imgui.same_line()
-    if not filters.enabled then imgui.text_colored("Disabled", -16776961)
-    else                        imgui.text_colored("Enabled",  -16711936)
+    draw_display_enabled(config.enabled and filters.enabled)
+    if filters.enabled then
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_join_approval
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_accept_setting", filter); imgui.unindent(10)
