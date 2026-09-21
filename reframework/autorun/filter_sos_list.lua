@@ -3,7 +3,7 @@ local fs, imgui, io, json, log, math, os, pcall, re, sdk, string, table, thread,
 local MOD_TITLE <const>   = "Filter SOS List"
 local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
-
+local MyMod = require("_MyModules")
 local cursor_helper 
 xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
         if reframework:is_drawing_ui() or not is_window_open then return end
@@ -62,12 +62,12 @@ local config = {
         monster_count = {
             enabled    = false, 
             value      = 1,
-            comparison = "at least",
+            comparison = "\u{2265}",
         },
         monster_threat = {
             enabled    = false,
             value      = 3,
-            comparison = "at least",
+            comparison = "\u{2265}",
         },
         monster_species = {
             enabled = false,
@@ -76,7 +76,7 @@ local config = {
         quest_level = {
             enabled    = false,
             value      = 7,
-            comparison = "at least",
+            comparison = "\u{2265}",
         },
         host_hr = {
             enabled   = false,
@@ -85,18 +85,18 @@ local config = {
             threshold = {
                 enabled    = false,
                 value      = 9,
-                comparison = "at least",
+                comparison = "\u{2265}",
             },
         },
         max_players = {
             enabled    = false,
             value      = 4,
-            comparison = "at most",
+            comparison = "\u{2264}",
         },
         current_players = {
             enabled    = false,
             value      = 1,
-            comparison = "at least",
+            comparison = "\u{2265}",
         },
         blocked_users = {
             enabled = false,
@@ -200,9 +200,12 @@ local ITEM_NAME_MAP <const> = {
 }
 
 local GEM_ID_LIST <const>            = { "36", "91", "333", "350", "387", "423", "436", "451", "464", "485", "533", "567", "105", "704", "559", "716", "726", "553", "734" }
-local COMPARISON_TYPE_LIST <const>   = {  "at least",       "at most",       "exactly" }
-local COMPARISON_TYPE_LOOKUP <const> = { ["at least"] = 1, ["at most"] = 2, ["exactly"] = 3 }
+local COMPARISON_TYPE_LIST <const>   = {  "\u{2265}",       "\u{2264}",       "\u{003D}" }
+local COMPARISON_TYPE_LOOKUP <const> = { ["\u{2265}"] = 1, ["\u{2264}"] = 2, ["\u{003D}"] = 3, ["at least"] = 1, ["at most"] = 2, ["exactly"] = 3 }
 local EVALUATORS <const>             = {
+    ["\u{2265}"] = function(current, required) return (current >= required) end,
+    ["\u{2264}"] = function(current, required) return (current <= required) end,
+    ["\u{003D}"] = function(current, required) return (current == required) end,
     ["at least"] = function(current, required) return (current >= required) end,
     ["at most"]  = function(current, required) return (current <= required) end,
     ["exactly"]  = function(current, required) return (current == required) end,
@@ -669,7 +672,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
             local evaluator  = EVALUATORS[comparison]
             if not (evaluator and evaluator(quest_data:get_QuestLv(), threshold.value)) then need_check = false end
         end
-        return need_check and ((host_hr <= min) or (host_hr >= max))
+        return need_check and ((host_hr < min) or (host_hr > max))
     end,
     ["monster_species"] = function(quest_data, filter) 
         local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
@@ -896,23 +899,23 @@ local function draw_settings_menu(setting_name, filter, menus, selected_index, i
     return new_index
 end
 
-local limit_min        = 0     -- 슬라이더 전체 최소 한계치
-local limit_max        = 1000  -- 슬라이더 전체 최대 한계치
-local step_size        = 20    -- 조절 스텝 단위
-local min_gap          = 40    -- Min과 Max가 서로 붙지 못하게 할 최소 수치 간격
+local limit_min        = 1    -- 슬라이더 전체 최소 한계치
+local limit_max        = 999  -- 슬라이더 전체 최대 한계치
+local step_size        = 10   -- 조절 스텝 단위
+local min_gap          = 0    -- Min과 Max가 서로 붙지 못하게 할 최소 수치 간격
 local active_handle    = nil
 local slider_width     = 370
-local slider_height    = 4
-local handle_size      = Vector2f.new(12, 16)
+local slider_height    = 16
+local handle_size      = Vector2f.new(12, 20)
 local function draw_slider_range_int(id, current_min, current_max)
     if not id then id = "HR" end
     if is_window_open then
         local window_size  = imgui.get_window_size()
-              slider_width = window_size.x - 24
+              slider_width = window_size.x - (handle_size.x * 2)
     end
     local cursor_pos   = imgui.get_cursor_screen_pos()
           cursor_pos.x = cursor_pos.x + 10
-    local display_text = string.format("%4d  <  Host " .. id .. "  <  %4d", current_min, current_max)
+    local display_text = string.format("%4d  \u{2264}  Host " .. id .. "  \u{2264}  %4d", current_min, current_max)
     if not UI_TEXT_SIZE[display_text] then UI_TEXT_SIZE[display_text] = imgui.calc_text_size(display_text) end
     local text_size     = UI_TEXT_SIZE[display_text]
     local text_center_x = cursor_pos.x + (slider_width / 2) - (text_size.x / 2)
@@ -922,17 +925,18 @@ local function draw_slider_range_int(id, current_min, current_max)
     imgui.spacing()
 
     local bar_y          = cursor_pos.y + text_size.y + 10
-    local bar_start      = Vector2f.new(cursor_pos.x, bar_y)
-    local bar_end        = Vector2f.new(cursor_pos.x + slider_width, bar_y)
-    local invisible_size = Vector2f.new(slider_width, handle_size.y + 4)
+    local bar_start      = Vector2f.new(cursor_pos.x + handle_size.x, bar_y)
+    local bar_end        = Vector2f.new(cursor_pos.x + slider_width - handle_size.x, bar_y)
+    local bar_width      = bar_end.x - bar_start.x
+    local invisible_size = Vector2f.new(slider_width, handle_size.y)
     imgui.set_cursor_screen_pos(Vector2f.new(cursor_pos.x, bar_y - (handle_size.y / 2)))
     imgui.invisible_button("##slider_catcher" .. id, invisible_size)
 
     local total_range    = limit_max - limit_min
     local min_ratio      = (current_min - limit_min) / total_range
     local max_ratio      = (current_max - limit_min) / total_range
-    local min_x          = bar_start.x + (min_ratio * slider_width)
-    local max_x          = bar_start.x + (max_ratio * slider_width)
+    local min_x          = bar_start.x + (min_ratio * bar_width) - handle_size.x
+    local max_x          = bar_start.x + (max_ratio * bar_width) + handle_size.x
     local mouse_pos      = imgui.get_mouse()
     local mouse_down     = imgui.is_mouse_down(0) 
     local host_hr_enable = config.general_filters.host_hr.enabled
@@ -955,9 +959,8 @@ local function draw_slider_range_int(id, current_min, current_max)
             end
         else
             local target_x       = math.max(bar_start.x, math.min(bar_end.x, mouse_pos.x))
-            local raw_val        = limit_min + ((target_x - bar_start.x) / slider_width) * total_range
-            local calculated_val = math.floor(raw_val / step_size + 0.5) * step_size
-
+            local raw_val        = limit_min + ((target_x - bar_start.x) / bar_width) * total_range
+            local calculated_val = math.max(math.min(math.floor(raw_val / step_size + 0.5) * step_size, limit_max), limit_min)
             if     (active_handle == "MIN") then current_min = math.min(calculated_val, current_max - min_gap) 
             elseif (active_handle == "MAX") then current_max = math.max(calculated_val, current_min + min_gap) 
             end
@@ -968,13 +971,13 @@ local function draw_slider_range_int(id, current_min, current_max)
 
     local draw_list        = imgui.get_window_draw_list()
     local color_bar        = 0x555555FF
-    local color_fill       = host_hr_enable and 0xFFFFFFFF or 0xFF707070
-    local color_min_handle = host_hr_enable and 0xFFFFFF00 or 0xFF707070
+    local color_fill       = host_hr_enable and 0xFFB0B0B0 or 0xFF707070
+    local color_min_handle = host_hr_enable and 0xFF0000FF or 0xFF707070
     local color_max_handle = host_hr_enable and 0xFFFF0000 or 0xFF707070
     local color_black      = 0x000000FF
 
     draw_list:add_line(bar_start, bar_end, color_bar, slider_height)
-    draw_list:add_line(Vector2f.new(min_x, bar_start.y), Vector2f.new(max_x, bar_start.y), color_fill, slider_height)
+    draw_list:add_line(Vector2f.new(min_x + handle_size.x, bar_start.y), Vector2f.new(max_x - handle_size.x, bar_start.y), color_fill, slider_height)
 
     local min_top_left  = Vector2f.new(min_x, bar_start.y - (handle_size.y / 2))
     local min_bot_right = Vector2f.new(min_x + handle_size.x, bar_start.y + (handle_size.y / 2))
@@ -1036,7 +1039,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_accept_setting", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests with")
+        imgui.text("Quest Join Approval:")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.accept_modes)
         local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
@@ -1049,13 +1052,13 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_quest_level", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests " .. ((filter.comparison == "exactly") and "at" or "with"))
+        imgui.text("Quest Level:")
         imgui.same_line()
         draw_settings_comparison("quest_level_comparison", filter)
         imgui.same_line()
         draw_settings_text_input("quest_level_filter", filter, 1, 10, 8)
         imgui.same_line()
-        imgui.text("quest level ")
+        imgui.text("\u{2605}")
         imgui.end_disabled() 
         -- Host hunter Rank -----------------------------------------------------------------------------------------------------------------------------------
         filter = filters.host_hr
@@ -1065,7 +1068,7 @@ local function draw_mod_settings()
         imgui.text("Show only quests with host HR limits")
         if filter.enabled then 
             imgui.indent(20); draw_settings_checkbox("filter_host_hr_threshold", filter.threshold); imgui.unindent(20)
-            imgui.same_line(); imgui.text("Apply only if quest level is" .. ((filter.threshold.comparison == "exactly") and " at" or ""))
+            imgui.same_line(); imgui.text("Apply only if quest level:")
             imgui.same_line(); draw_settings_comparison("host_hr_threshold_comparison", filter.threshold)
             imgui.same_line(); draw_settings_text_input("host_hr_threshold_level_filter", filter.threshold, 1, 10, 8)
         end
@@ -1076,7 +1079,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("monster_name", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests matching base name")
+        imgui.text("Monster Name:")
         imgui.indent(30)
         local boss_names_str  = nil
         local remaining_count = nil
@@ -1147,66 +1150,61 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_monster_species", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line() 
-        imgui.text("Show only quests with")
+        imgui.text("Monster Species:")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.enemy_species)
         local changed, new_index = imgui.combo("##filter_monster_species", filter.value, ENEMY_BOSS.SPECIES_MAP)
         if changed then filter.value = new_index end
         imgui.pop_item_width()
-        imgui.same_line()
-        imgui.text("targets ")
         imgui.end_disabled()
         -- Monster Threat -------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_threat
         imgui.indent(10); draw_settings_checkbox("filter_monster_threat", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests " .. ((filter.comparison == "exactly") and "at" or "with"))
+        imgui.text("Monster level:")
         imgui.same_line()
         draw_settings_comparison("monster_threat_comparison", filter)
         imgui.same_line()
-        draw_settings_text_input("monster_threat_filter", filter, 1, 5, 3)
+        draw_settings_text_input("monster_threat_filter", filter, 3, 5, 3)
         imgui.same_line()
-        imgui.text("threat level ")
+        imgui.text_colored("\u{25C6}", 0xFFB469FF)
         imgui.end_disabled()
         -- Monster Count --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_count
         imgui.indent(10); draw_settings_checkbox("monster_count", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests with")
+        imgui.text("Monster Number:")
         imgui.same_line()
         draw_settings_comparison("monster_count_comparison", filter)
         imgui.same_line()
-        local value = draw_settings_text_input("monster_count_filter", filter, 1, 4, 1)
-        imgui.same_line()
-        imgui.text((tonumber(value) == 1) and "monster " or "monsters ")
+        local value = draw_settings_text_input("monster_count_filter", filter, 1, 5, 1)
+        --imgui.same_line()
+        --imgui.text((tonumber(value) == 1) and "monster " or "monsters ")
         imgui.end_disabled()
         -- Current Player Count -------------------------------------------------------------------------------------------------------------------------------
         filter = filters.current_players
         imgui.indent(10); draw_settings_checkbox("filter_current_players", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests with")
+        --imgui.text("Show only quests with")
+        imgui.text("Current Member" .. ((filter.value > 1) and "s:" or ":"))
         imgui.same_line()
         draw_settings_comparison("current_players_comparison", filter)
         imgui.same_line()
         local value = draw_settings_text_input("current_players_filter", filter, 1, 3, 1)
-        imgui.same_line()
-        imgui.text((tonumber(value) == 1) and "current player " or "current players ")
         imgui.end_disabled() 
         -- Max Player Count -----------------------------------------------------------------------------------------------------------------------------------
         filter = filters.max_players
         imgui.indent(10); draw_settings_checkbox("filter_max_players", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line() 
-        imgui.text("Show only quests with")
+        imgui.text("Max Member:")
         imgui.same_line()
         draw_settings_comparison("max_players_comparison", filter)
         imgui.same_line()
         draw_settings_text_input("max_players_filter", filter, 2, 4, 2)
-        imgui.same_line()
-        imgui.text("max players ")
         imgui.end_disabled()
         -- Limit Weapons---------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.limit_weapon
@@ -1251,7 +1249,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_started_time", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests started within the last")
+        imgui.text("Quest Started within:")
         imgui.same_line()
         local value = draw_settings_text_input("started_time_filter", filter, 1, 60, 1)
         imgui.same_line()
@@ -1262,7 +1260,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_multiplay_setting", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests that allow")
+        imgui.text("Multiplay Settings:")
         imgui.same_line()
         imgui.push_item_width(UI_WIDTH.multiplay_types)
         local multiplay_index = MULTIPLAY_TYPE_LOOKUP[filter.value] or 1
@@ -1275,7 +1273,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_field", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests in")
+        imgui.text("Fields:")
         imgui.same_line()
         local field_str       = nil
               remaining_count = nil
@@ -1294,7 +1292,7 @@ local function draw_mod_settings()
         elseif not field_str or (field_str == "") then field_str = "<No Fields Selected>"                                        end
         local new_index = draw_settings_menu(field_str, filter, FIELD_LIST, 0, true)
         if new_index then 
-            local field      = FIELD_LIST[new_index]
+            local field        = FIELD_LIST[new_index]
             filter.list[field] = not filter.list[field]
         end
         imgui.end_disabled()
@@ -1303,7 +1301,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("filter_environment", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests in")
+        imgui.text("Environments:")
         imgui.same_line()
         local environments_str = nil
               remaining_count  = nil
@@ -1338,7 +1336,7 @@ local function draw_mod_settings()
         imgui.indent(10); draw_settings_checkbox("gathering_boost", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text("Show only quests with \"" .. get_localized_text("gathering boost") .. "\"")
+        imgui.text(get_localized_text("gathering boost"))
         imgui.end_disabled()
         -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.blocked_users
