@@ -669,7 +669,7 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
             local evaluator  = EVALUATORS[comparison]
             if not (evaluator and evaluator(quest_data:get_QuestLv(), threshold.value)) then need_check = false end
         end
-        return need_check and ((host_hr <= min) or (host_hr >= max))
+        return need_check and ((host_hr < min) or (host_hr > max))
     end,
     ["monster_species"] = function(quest_data, filter) 
         local monster_ids   = quest_data:get_TargetEmId()      -- app.EnemyDef.ID[] get_TargetEmId()
@@ -896,23 +896,23 @@ local function draw_settings_menu(setting_name, filter, menus, selected_index, i
     return new_index
 end
 
-local limit_min        = 0     -- 슬라이더 전체 최소 한계치
-local limit_max        = 1000  -- 슬라이더 전체 최대 한계치
-local step_size        = 20    -- 조절 스텝 단위
-local min_gap          = 40    -- Min과 Max가 서로 붙지 못하게 할 최소 수치 간격
+local limit_min        = 1    -- 슬라이더 전체 최소 한계치
+local limit_max        = 999  -- 슬라이더 전체 최대 한계치
+local step_size        = 10   -- 조절 스텝 단위
+local min_gap          = 0    -- Min과 Max가 서로 붙지 못하게 할 최소 수치 간격
 local active_handle    = nil
 local slider_width     = 370
-local slider_height    = 4
-local handle_size      = Vector2f.new(12, 16)
+local slider_height    = 16
+local handle_size      = Vector2f.new(12, 20)
 local function draw_slider_range_int(id, current_min, current_max)
     if not id then id = "HR" end
     if is_window_open then
         local window_size  = imgui.get_window_size()
-              slider_width = window_size.x - 24
+              slider_width = window_size.x - (handle_size.x * 2)
     end
     local cursor_pos   = imgui.get_cursor_screen_pos()
           cursor_pos.x = cursor_pos.x + 10
-    local display_text = string.format("%4d  <  Host " .. id .. "  <  %4d", current_min, current_max)
+    local display_text = string.format("%4d  \u{2264}  Host " .. id .. "  \u{2264}  %4d", current_min, current_max)
     if not UI_TEXT_SIZE[display_text] then UI_TEXT_SIZE[display_text] = imgui.calc_text_size(display_text) end
     local text_size     = UI_TEXT_SIZE[display_text]
     local text_center_x = cursor_pos.x + (slider_width / 2) - (text_size.x / 2)
@@ -922,17 +922,18 @@ local function draw_slider_range_int(id, current_min, current_max)
     imgui.spacing()
 
     local bar_y          = cursor_pos.y + text_size.y + 10
-    local bar_start      = Vector2f.new(cursor_pos.x, bar_y)
-    local bar_end        = Vector2f.new(cursor_pos.x + slider_width, bar_y)
-    local invisible_size = Vector2f.new(slider_width, handle_size.y + 4)
+    local bar_start      = Vector2f.new(cursor_pos.x + handle_size.x, bar_y)
+    local bar_end        = Vector2f.new(cursor_pos.x + slider_width - handle_size.x, bar_y)
+    local bar_width      = bar_end.x - bar_start.x
+    local invisible_size = Vector2f.new(slider_width, handle_size.y)
     imgui.set_cursor_screen_pos(Vector2f.new(cursor_pos.x, bar_y - (handle_size.y / 2)))
     imgui.invisible_button("##slider_catcher" .. id, invisible_size)
 
     local total_range    = limit_max - limit_min
     local min_ratio      = (current_min - limit_min) / total_range
     local max_ratio      = (current_max - limit_min) / total_range
-    local min_x          = bar_start.x + (min_ratio * slider_width)
-    local max_x          = bar_start.x + (max_ratio * slider_width)
+    local min_x          = bar_start.x + (min_ratio * bar_width) - handle_size.x
+    local max_x          = bar_start.x + (max_ratio * bar_width) + handle_size.x
     local mouse_pos      = imgui.get_mouse()
     local mouse_down     = imgui.is_mouse_down(0) 
     local host_hr_enable = config.general_filters.host_hr.enabled
@@ -955,9 +956,8 @@ local function draw_slider_range_int(id, current_min, current_max)
             end
         else
             local target_x       = math.max(bar_start.x, math.min(bar_end.x, mouse_pos.x))
-            local raw_val        = limit_min + ((target_x - bar_start.x) / slider_width) * total_range
-            local calculated_val = math.floor(raw_val / step_size + 0.5) * step_size
-
+            local raw_val        = limit_min + ((target_x - bar_start.x) / bar_width) * total_range
+            local calculated_val = math.max(math.min(math.floor(raw_val / step_size + 0.5) * step_size, limit_max), limit_min)
             if     (active_handle == "MIN") then current_min = math.min(calculated_val, current_max - min_gap) 
             elseif (active_handle == "MAX") then current_max = math.max(calculated_val, current_min + min_gap) 
             end
@@ -968,13 +968,13 @@ local function draw_slider_range_int(id, current_min, current_max)
 
     local draw_list        = imgui.get_window_draw_list()
     local color_bar        = 0x555555FF
-    local color_fill       = host_hr_enable and 0xFFFFFFFF or 0xFF707070
-    local color_min_handle = host_hr_enable and 0xFFFFFF00 or 0xFF707070
+    local color_fill       = host_hr_enable and 0xFFB0B0B0 or 0xFF707070
+    local color_min_handle = host_hr_enable and 0xFF0000FF or 0xFF707070
     local color_max_handle = host_hr_enable and 0xFFFF0000 or 0xFF707070
     local color_black      = 0x000000FF
 
     draw_list:add_line(bar_start, bar_end, color_bar, slider_height)
-    draw_list:add_line(Vector2f.new(min_x, bar_start.y), Vector2f.new(max_x, bar_start.y), color_fill, slider_height)
+    draw_list:add_line(Vector2f.new(min_x + handle_size.x, bar_start.y), Vector2f.new(max_x - handle_size.x, bar_start.y), color_fill, slider_height)
 
     local min_top_left  = Vector2f.new(min_x, bar_start.y - (handle_size.y / 2))
     local min_bot_right = Vector2f.new(min_x + handle_size.x, bar_start.y + (handle_size.y / 2))
@@ -1167,7 +1167,7 @@ local function draw_mod_settings()
         imgui.same_line()
         draw_settings_text_input("monster_threat_filter", filter, 1, 5, 3)
         imgui.same_line()
-        imgui.text("threat level ")
+        imgui.text("monster level ")
         imgui.end_disabled()
         -- Monster Count --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_count
