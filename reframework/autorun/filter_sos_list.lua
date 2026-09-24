@@ -665,14 +665,9 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     ["host_hr"] = function(quest_data, filter) 
         local session_data = quest_data.Session
         local host_hr      = session_data:get_HostHr()
-        local min, max     = filter.min, filter.max
         local need_check   = true
         local threshold    = filter.threshold
-        if threshold.enabled then
-            local comparison = threshold.comparison or COMPARISON_TYPE_LIST[1]
-            local evaluator  = EVALUATORS[comparison]
-            if not (evaluator and evaluator(quest_data:get_QuestLv(), threshold.value)) then need_check = false end
-        end
+        if threshold.enabled and EVALUATORS["outside"](quest_data:get_QuestLv(), threshold.min, threshold.max) then need_check = false end
         return need_check and EVALUATORS["outside"](host_hr, filter.min, filter.max)
     end,
     ["monster_species"] = function(quest_data, filter) 
