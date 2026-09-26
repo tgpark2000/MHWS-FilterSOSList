@@ -30,7 +30,7 @@ local ui_text = {
         MONSTER_NAME = {
             DISABLED = "Show only quests matching base name ",
             NO_SELECTED = "<No Monster Name Selected>",
-            AND         = "and +",
+            AND         = " and +",
             MORE        = " more",
             RESET       = "Reset",
         },
@@ -39,24 +39,25 @@ local ui_text = {
             NO_SELECTED = "<No Mission Type Selected>",
             AND         = "and +",
             MORE        = " more",
+            RESET       = "Reset",
         },
         MONSTER_SPECIES = {
             DISABLED    = "Show only quests with selected monster species",
             NO_SELECTED = "<No Monster Species Selected>",
-            AND         = "and +",
+            AND         = " and +",
             MORE        = " more",
-            RESET       = "Reset"
+            RESET       = "Reset",
         },
         MONSTER_THREAT = {
-            DISABLED    = "Show only quests within monster threat levels",
+            DISABLED           = "Show only quests within monster threat levels",
             SLIDER_CENTER_TEXT = "Monster Threat Level",
         },
         MONSTER_COUNT = {
-            DISABLED    = "Show only quests within a monster count",
+            DISABLED           = "Show only quests within a monster count",
             SLIDER_CENTER_TEXT = "Monster Count",
         },
         CURRENT_PLAYERS = {
-            DISABLED    = "Show only quests within a player count",
+            DISABLED           = "Show only quests within a player count",
             SLIDER_CENTER_TEXT = "Current players",
         },
         MAX_PLAYERS = {
@@ -66,7 +67,7 @@ local ui_text = {
         LIMIT_WEAPON = {
             DISABLED         = "Show only quests without selected weapons equipped",
             NO_SELECTED      = "<No Weapon Selected>",
-            AND              = "and +",
+            AND              = " and +",
             MORE             = " more",
             RESET            = "Reset",
             APPLY_SECONDDARY = "Apply filter to secondary weapons as well",
@@ -78,20 +79,20 @@ local ui_text = {
         MULTIPLAY_SETTINGS = {
             DISABLED = "Show only quests that allow selected multiplay settings",
             ENABLED  = "Multiplay Settings:",
-            AND      = "and +",
-            MORE     = " more",
         },
         QUEST_FIELDS = {
             DISABLED    = "Show only quests in selected fields",
             NO_SELECTED = "<No Fields Selected>",
-            AND         = "and +",
+            AND         = " and +",
             MORE        = " more",
+            RESET       = "Reset",
         },
         QUEST_ENV = {
             DISABLED    = "Show only quests in selected environments",
             NO_SELECTED = "<No Environments Selected>",
-            AND         = "and +",
+            AND         = " and +",
             MORE        = " more",
+            RESET       = "Reset",
         },
         WHITELIST_DROP = {
             TEXT = "Show only quests with wishlisted monster drops",
