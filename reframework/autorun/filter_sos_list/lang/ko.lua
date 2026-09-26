@@ -25,22 +25,23 @@ local this = {
     MONSTER_NAME = {
         DISABLED    = "선택된 몬스터 이름과 일치하는 퀘스트만 보여줍니다",
         NO_SELECTED = "<선택된 몬스터 이름이 없습니다>",
-        AND         = "외 +",
+        AND         = " 외 +",
         MORE        = "마리",
         RESET       = "리셋",
     },
     MISSION_TYPE = {
         DISABLED    = "선택된 퀘스트 종류만 보여줍니다",
         NO_SELECTED = "<선택된 퀘스트 종류이 없습니다>",
-        AND         = "외 +",
+        AND         = " 외 +",
         MORE        = "개",
+        RESET       = "리셋",
     },
     MONSTER_SPECIES = {
         DISABLED    = "선택된 몬스터 종에 일치하는 퀘스트만 보여줍니다",
         NO_SELECTED = "<선택된 몬스터 종이 없습니다>",
-        AND         = "외 +",
+        AND         = " 외 +",
         MORE        = "종",
-        RESET       = "리셋"
+        RESET       = "리셋",
     },
     MONSTER_THREAT = {
         DISABLED           = "몬스터 위험도에 일치하는 퀘스트만 보여줍니다",
@@ -61,7 +62,7 @@ local this = {
     LIMIT_WEAPON = {
         DISABLED         = "멤버들이 설정된 무기를 장착하지 않은 퀘스트만 보여줍니다 ",
         NO_SELECTED      = "<선택된 무기가 없습니다>",
-        AND              = "외 +",
+        AND              = " 외 +",
         MORE             = "종",
         RESET            = "리셋",
         APPLY_SECONDDARY = "장착된 서브 무기도 적용합니다",
@@ -73,19 +74,17 @@ local this = {
     MULTIPLAY_SETTINGS = {
         DISABLED = "멀티플레이 설정에 해당하는 퀘스트만 보여줍니다",
         ENABLED  = "멀티플레이 설정:",
-        AND      = "외 +",
-        MORE     = "개",
     },
     QUEST_FIELDS = {
         DISABLED    = "선택된 필드에 해당하는 퀘스트만 보여줍니다",
         NO_SELECTED = "<선택된 필드가 없습니다>",
-        AND         = "외 +",
+        AND         = " 외 +",
         MORE        = "곳",
     },
     QUEST_ENV = {
         DISABLED    = "선택된 환경에 해당하는 퀘스트만 보여줍니다",
         NO_SELECTED = "<선택된 환경이 없습니다>",
-        AND         = "외 +",
+        AND         = " 외 +",
         MORE        = "",
     },
     WHITELIST_DROP = {

@@ -495,12 +495,12 @@ local function initLanguageFile()
 end
 
 local function initialize()  
+    ENEMY_BOSS.update()
+    ITEM_FILTERS.CUSTOM_MODE.update()
     load_config()
     initLanguageFile()
     setup_localized_text()
-    ENEMY_BOSS.update()
     UI_WIDTH.update()
-    ITEM_FILTERS.CUSTOM_MODE.update()
 end 
 local SCENE_TYPE_INVALID = sdk.find_type_definition("app.cFieldSceneParam.SCENE_TYPE"):get_field("INVALID"):get_data()
 local game_flow_manager  = sdk.get_managed_singleton("app.GameFlowManager")
@@ -873,7 +873,7 @@ local function draw_slider_range_int(id, setting, center_text)
     local bar_start      = Vector2f.new(cursor_pos.x + handle_size.x, bar_y)
     local bar_end        = Vector2f.new(cursor_pos.x + data.width - handle_size.x, bar_y)
     local bar_width      = bar_end.x - bar_start.x
-    local invisible_size = Vector2f.new(data.width, handle_size.y)
+    local invisible_size = Vector2f.new(data.width + 20, handle_size.y)
     imgui.set_cursor_screen_pos(Vector2f.new(cursor_pos.x, bar_y - (handle_size.y / 2)))
     imgui.invisible_button("##slider_catcher_" .. id, invisible_size)
 
@@ -1061,17 +1061,17 @@ local function draw_mod_settings()
                     local current_monster_name = ENEMY_BOSS.ID_MAP[id]
                     if not remaining_count then
                         local next_str = (boss_names_str and boss_names_str .. ", " or "") .. current_monster_name
-                        if (imgui.calc_text_size(next_str).x > 250) then remaining_count = 1
+                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count = 1
                         else                                             boss_names_str  = next_str end
                     else
                         remaining_count = remaining_count + 1
                     end
                 end
             end
-            if     remaining_count                              then boss_names_str = boss_names_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE
-            elseif not boss_names_str or (boss_names_str == "") then boss_names_str = UI_STR.NO_SELECTED                                                       end
-            if remaining_count then
-                if draw_button(UI_STR.RESET .. "##monster_names", { 50, 24 }) then filter.list = {} end
+            if     not boss_names_str or (boss_names_str == "")              then boss_names_str = UI_STR.NO_SELECTED
+            else
+                if remaining_count                                           then boss_names_str = boss_names_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
+                if draw_button(UI_STR.RESET .. "##monster_name", { 50, 24 }) then filter.list    = {}                                                                       end
                 imgui.same_line()
             end
             imgui.set_next_item_width(280)
@@ -1102,15 +1102,19 @@ local function draw_mod_settings()
                 if filter.list[mission_type] then
                     if not remaining_count then 
                         local next_str = (mission_type_str and mission_type_str .. "," or "") .. get_localized_text(mission_type)
-                        if (imgui.calc_text_size(next_str).x > 250) then remaining_count  = 1
+                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count  = 1
                         else                                             mission_type_str = next_str end
                     else
                         remaining_count = remaining_count + 1
                     end
                 end
             end
-            if     remaining_count                                  then mission_type_str = mission_type_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE
-            elseif not mission_type_str or (mission_type_str == "") then mission_type_str = UI_STR.NO_SELECTED                                                         end
+            if     not mission_type_str or (mission_type_str == "")          then mission_type_str = UI_STR.NO_SELECTED
+            else
+                if remaining_count                                           then mission_type_str = mission_type_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
+                if draw_button(UI_STR.RESET .. "##mission_type", { 50, 24 }) then for k, v in pairs(filter.list) do filter.list[k] = false end                                  end 
+                imgui.same_line()
+            end
             local new_index = draw_settings_menu(mission_type_str, filter, MISSION_TYPE_LIST, 0, true)
             if new_index then 
                 local mission_type        = MISSION_TYPE_LIST[new_index]
@@ -1135,17 +1139,17 @@ local function draw_mod_settings()
                     local current_monster_species = ENEMY_BOSS.SPECIES_ID_MAP[id]
                     if not remaining_count then
                         local next_str = (boss_species_str and boss_species_str .. ", " or "") .. current_monster_species
-                        if (imgui.calc_text_size(next_str).x > 250) then remaining_count  = 1
+                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count  = 1
                         else                                             boss_species_str = next_str end
                     else
                         remaining_count = remaining_count + 1
                     end
                 end
             end
-            if     remaining_count                                  then boss_species_str = boss_species_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE
-            elseif not boss_species_str or (boss_species_str == "") then boss_species_str = UI_STR.NO_SELECTED                                                         end
-            if remaining_count then
-                if draw_button(UI_STR.RESET .. "##monster_names", { 50, 24 }) then filter.list = {} end
+            if     not boss_species_str or (boss_species_str == "")             then boss_species_str = UI_STR.NO_SELECTED
+            else
+                if remaining_count                                              then boss_species_str = boss_species_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
+                if draw_button(UI_STR.RESET .. "##monster_species", { 50, 24 }) then filter.list      = {}                                                                         end
                 imgui.same_line()
             end
             imgui.set_next_item_width(280)
@@ -1212,17 +1216,17 @@ local function draw_mod_settings()
                 if filter.list[weapon] then
                     if not remaining_count then
                         local next_str = (equipped_weapons_str and equipped_weapons_str .. "," or "") .. get_localized_text(weapon)
-                        if (imgui.calc_text_size(next_str).x > 250) then remaining_count      = 1
+                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count      = 1
                         else                                             equipped_weapons_str = next_str end
                     else
                         remaining_count = remaining_count + 1
                     end
                 end
             end
-            if     remaining_count                                          then equipped_weapons_str = equipped_weapons_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE
-            elseif not equipped_weapons_str or (equipped_weapons_str == "") then equipped_weapons_str = UI_STR.NO_SELECTED                                                             end
-            if remaining_count then
-                if draw_button(UI_STR.RESET .. "##limit_weapons", { 50, 24 }) then filter.list = {} end
+            if     not equipped_weapons_str or (equipped_weapons_str == "")   then equipped_weapons_str = UI_STR.NO_SELECTED
+            else
+                if remaining_count                                            then equipped_weapons_str = equipped_weapons_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
+                if draw_button(UI_STR.RESET .. "##limit_weapons", { 50, 24 }) then filter.list          = {}                                                                             end
                 imgui.same_line()
             end
             local new_index = draw_settings_menu(equipped_weapons_str, filter, WEAPON_LIST, 0, true)
@@ -1276,15 +1280,19 @@ local function draw_mod_settings()
                 if filter.list[field] then
                     if not remaining_count then 
                         local next_str = (field_str and field_str .. "," or "") .. get_localized_text(field) 
-                        if (imgui.calc_text_size(next_str).x > 250) then remaining_count = 1
+                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count = 1
                         else                                             field_str       = next_str end
                     else
                         remaining_count = remaining_count + 1
                     end
                 end
             end
-            if     remaining_count                    then field_str = field_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE
-            elseif not field_str or (field_str == "") then field_str = UI_STR.NO_SELECTED                                                  end
+            if     not field_str or (field_str == "")                        then field_str = UI_STR.NO_SELECTED
+            else
+                if remaining_count                                           then field_str = field_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
+                if draw_button(UI_STR.RESET .. "##quest_fields", { 50, 24 }) then for k, v in pairs(filter.list) do filter.list[k] = false end                    end
+                imgui.same_line()
+            end
             local new_index = draw_settings_menu(field_str, filter, FIELD_LIST, 0, true)
             if new_index then 
                 local field        = FIELD_LIST[new_index]
@@ -1306,15 +1314,19 @@ local function draw_mod_settings()
                 if filter.list[environment] then
                     if not remaining_count then 
                         local next_str = (environments_str and environments_str .. "," or "") .. get_localized_text(environment) 
-                        if (imgui.calc_text_size(next_str).x > 200) then remaining_count  = 1
+                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count  = 1
                         else                                             environments_str = next_str end
                     else
                         remaining_count = remaining_count + 1
                     end
                 end
             end
-            if     remaining_count                                  then environments_str = environments_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE
-            elseif not environments_str or (environments_str == "") then environments_str = UI_STR.NO_SELECTED                                                         end
+            if     not environments_str or (environments_str == "")          then environments_str = UI_STR.NO_SELECTED
+            else
+                if remaining_count                                           then environments_str = environments_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
+                if draw_button(UI_STR.RESET .. "##quest_envirs", { 50, 24 }) then for k, v in pairs(filter.list) do filter.list[k] = false end                                  end
+                imgui.same_line()
+            end
             local new_index = draw_settings_menu(environments_str, filter, ENVIRONMENT_LIST, 0, true)
             if new_index then 
                 local env      = ENVIRONMENT_LIST[new_index]
