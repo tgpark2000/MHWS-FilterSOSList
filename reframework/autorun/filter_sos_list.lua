@@ -32,8 +32,8 @@ xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, functio
 end)
 
 local config = {
-    enabled       = true,
-    language_code = "",
+    enabled         = true,
+    language_code   = "",
     general_filters = {
         enabled = true,
         monster_name = { 
@@ -272,31 +272,33 @@ local function get_localized_text(key)
     return text
 end
 
-local dataset = { -- name: localized target name
+local dataset = { 
+    -- targets: Internal system keys / default English names
+    -- names: Target's localized names
     item = {
         targets = { "469", "470", "478", "157", "620", "653", "820", "WISHLIST", "GEM" },
         gem_ids = { "36", "91", "333", "350", "387", "423", "436", "451", "464", "485", "533", "567", "105", "704", "559", "716", "726", "553", "734" },
         names   = {},  -- [index] = name
         lookup  = {},  -- [name] = id and [id] = index
         modes   = {},
-        custom = {  -- menu
-            operators    = {},
-            names        = {},
-            lookup       = {},
+        custom  = {  -- menu
+            operators      = {},
+            names          = {},
+            lookup         = {},
             selected_index = 1,
         },
         width = {
-            name = 0,
-            mode = 0,
+            name     = 0,
+            mode     = 0,
             operator = 0,
         },
     },
     em_boss = {
-        names = {},
-        name_map = {},
-        species = {},
-        species_map = {},
-        INVALID_SPECIES  = sdk.find_type_definition("app.EnemyDef.SPECIES_Fixed"):get_field("INVARID"):get_data() or 0,  -- 필드명이 'INVARID' 였다
+        names           = {},
+        name_map        = {},
+        species         = {},
+        species_map     = {},
+        INVALID_SPECIES = sdk.find_type_definition("app.EnemyDef.SPECIES_Fixed"):get_field("INVARID"):get_data() or 0,  -- 필드명이 'INVARID' 였다
     },
     multiplay_setting = {
         targets = { "Players & Support Hunters", "Only Players" },
@@ -343,8 +345,8 @@ function dataset.item.localize()
         elseif (id == "GEM")      then name = "Monster Gem"
         else                           name = get_item_name:call(nil, tonumber(id)) end
         table.insert(this.names, name)
-        this.lookup[name] = id
-        this.lookup[id]   = i
+        this.lookup[name] = id  -- [target's localized name] = id
+        this.lookup[id]   = i   -- [id] = index
         local size = imgui.calc_text_size(name).x + 30
         if size > this.width.name then this.width.name = size end
     end
@@ -369,8 +371,8 @@ function dataset.item.set_localization(localized_reward_items)
         if size > this.width.operator then this.width.operator = size end
     end
 end
-function dataset.item.custom.generate_list()
-    local target_list  = config.item_filters.custom.target_list
+function dataset.item.custom.refresh_list()
+    local target_list   = config.item_filters.custom.target_list
     local this          = dataset.item
     local custom        = this.custom
           custom.names  = {}
@@ -400,11 +402,11 @@ function dataset.em_boss.localize()
             local species_fixed = get_em_species_fixed:call(nil, id)
             if (species_fixed == this.INVALID_SPECIES) then break end
             
-            local guid_name     = get_em_name:call(nil, id)
-            local name          = convert_guid_to_text:call(nil, guid_name, 0)
-                  id            = tostring(id)
-            this.name_map[id]   = name
-            this.name_map[name] = id
+            local guid_name       = get_em_name:call(nil, id)
+            local name            = convert_guid_to_text:call(nil, guid_name, 0)
+            local str_id          = tostring(id)
+            this.name_map[str_id] = name
+            this.name_map[name]   = str_id
             table.insert(this.names, name)
 
             local species_data              = get_em_species_data:call(nil, species_fixed - 1)
@@ -520,8 +522,7 @@ function build_default_config()
     this = dataset.mission_type
     list = config.general_filters.mission_type.list
     for i, _ in ipairs(this.names) do 
-        local id = tostring(i)
-        list[id] = false
+        list[tostring(i)] = false
     end
 
     this = dataset.weapon
@@ -576,9 +577,8 @@ local function initialize()
     initLanguageFile()
     dataset.language.set_localization(language_manager.get_name_list())
     dataset.item.set_localization(UI_TEXT.REWARD_ITEMS)
-    dataset.item.custom.generate_list()
+    dataset.item.custom.refresh_list()
 end 
-
 
 local SCENE_TYPE_INVALID = sdk.find_type_definition("app.cFieldSceneParam.SCENE_TYPE"):get_field("INVALID"):get_data()
 local game_flow_manager  = sdk.get_managed_singleton("app.GameFlowManager")
@@ -759,10 +759,10 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         return session_data:get_IsResucue()
     end,
     ["mission_type"] = function(quest_data, filter)
-        local session_data     = quest_data.Session
-        local search_result    = session_data:get_SearchResult()
-        local mission_type     = search_result:getMissionType()  -- app.MissionTypeList.TYPE,  MAINSTORY:0, SIDESTORY:1, FREEQUEST:2, KEEPQUEST:4, INSTANTQUEST:5, STREAM_EVENTQUEST:6
-        local mission_type_id  = dataset.mission_type.lookup[mission_type]
+        local session_data    = quest_data.Session
+        local search_result   = session_data:get_SearchResult()
+        local mission_type    = search_result:getMissionType()  -- app.MissionTypeList.TYPE,  MAINSTORY:0, SIDESTORY:1, FREEQUEST:2, KEEPQUEST:4, INSTANTQUEST:5, STREAM_EVENTQUEST:6
+        local mission_type_id = dataset.mission_type.lookup[mission_type]
         return not filter.list[mission_type_id]
     end,
     ["quest_type"] = function(quest_data, filter)
@@ -894,8 +894,8 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
 }
 
 local slider_range_active_handle = nil
-local slider_range_text_size = {}
-local slider_range_data = {
+local slider_range_text_size     = {}
+local slider_range_data          = {
     ["host_hr"]            = { width = 330, height = 20, limit_min = 1, limit_max = 999, step_size = 10, min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%4d  \u{2264}  %s  \u{2264}  %4d" },
     ["host_hr_threshold"]  = { width = 170, height = 20, limit_min = 1, limit_max = 10,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
     ["monster_count"]      = { width = 330, height = 20, limit_min = 1, limit_max = 6,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
@@ -926,13 +926,13 @@ local function draw_slider_range_int(id, setting, center_text)
     imgui.set_cursor_screen_pos(Vector2f.new(cursor_pos.x, bar_y - (handle_size.y / 2)))
     imgui.invisible_button("##slider_catcher_" .. id, invisible_size)
 
-    local total_range    = data.limit_max - data.limit_min
-    local min_ratio      = (current_min - data.limit_min) / total_range
-    local max_ratio      = (current_max - data.limit_min) / total_range
-    local min_x          = bar_start.x + (min_ratio * bar_width) - handle_size.x
-    local max_x          = bar_start.x + (max_ratio * bar_width) + handle_size.x
-    local mouse_pos      = imgui.get_mouse()
-    local mouse_down     = imgui.is_mouse_down(0) 
+    local total_range = data.limit_max - data.limit_min
+    local min_ratio   = (current_min - data.limit_min) / total_range
+    local max_ratio   = (current_max - data.limit_min) / total_range
+    local min_x       = bar_start.x + (min_ratio * bar_width) - handle_size.x
+    local max_x       = bar_start.x + (max_ratio * bar_width) + handle_size.x
+    local mouse_pos   = imgui.get_mouse()
+    local mouse_down  = imgui.is_mouse_down(0) 
 
     if mouse_down then
         if not slider_range_active_handle then
@@ -1033,8 +1033,9 @@ end
 
 local reset_button_size = { 50, 24 }
 local get_id_func_list  = { -- ["param type"] = function ... end
-    ["number"] = function(param, i, value) return tostring(i + param)      end,
-    ["table"]  = function(param, i, value) return param[value] or param[i] end,
+    ["number"]   = function(param, i, value) return tostring(i + param)      end,
+    ["table"]    = function(param, i, value) return param[value] or param[i] end,
+    ["function"] = function(param, i, value) return param(i, value)          end,
 }
 
 local function draw_settings_menuset(setting_name, filter, menus, param, ui_str)
@@ -1078,6 +1079,7 @@ local function draw_display_enabled(isEnable)
     else             imgui.text_colored(UI_TEXT.DISABLED, 0xFF0000FF) end
 end
 
+local small_button_size = { 24, 24 }
 local function draw_mod_settings()
     if not UI_TEXT then 
         imgui.text_colored("Still initializing... Please wait.", 0xFF00FFFF)
@@ -1104,7 +1106,7 @@ local function draw_mod_settings()
             config.language_code = UI_TEXT.language_code
             dataset.language.set_localization(language_manager.get_name_list())
             dataset.item.set_localization(UI_TEXT.REWARD_ITEMS)
-            dataset.item.custom.generate_list()
+            dataset.item.custom.refresh_list()
             save_config()
         end
     end
@@ -1350,12 +1352,12 @@ local function draw_mod_settings()
             imgui.text(ui_str.SHOW_SOS_QUEST_WHERE)
             for item_id, item_num in pairs(filter.target_list) do
                 if item_num then
-                    if draw_button("-##item_filter_Remove_" .. item_id, { 24, 24 }) then
+                    if draw_button("-##item_filter_Remove_" .. item_id, small_button_size) then
                         filter.target_list[item_id] = false
-                        custom_data.generate_list()
+                        custom_data.refresh_list()
                     end
                     imgui.same_line()
-                    imgui.text(get_localized_text(tonumber(item_id) or item_id))
+                    imgui.text(get_localized_text(tonumber(item_id)))
                     imgui.same_line()
                     imgui.text(ui_str.APPEARS_AT_LEAST)
                     imgui.same_line()
@@ -1372,18 +1374,18 @@ local function draw_mod_settings()
             imgui.text("..?")
             if (#custom_data.names > 0) then
                 if not custom_data.names[custom_data.selected_index] then custom_data.selected_index = 1 end
-                if draw_button("+##item_filter_Add", { 24, 24 }) and (custom_data.selected_index > 0) then
+                if draw_button("+##item_filter_Add", small_button_size) and (custom_data.selected_index > 0) then
                     local selected_item_id = custom_data.lookup[custom_data.selected_index]
                     filter.target_list[selected_item_id] = 1
-                    custom_data.generate_list()
+                    custom_data.refresh_list()
                 end
             else
-                imgui.invisible_button("#item_filter_Invisible_button", { 24, 24 })
+                imgui.invisible_button("#item_filter_Invisible_button", small_button_size)
             end
             imgui.same_line()
             imgui.push_item_width(data.width.name)
             local item_name    = custom_data.names[custom_data.selected_index] 
-            local selected_str = item_name and get_localized_text(item_name) or ui_str.NO_MORE_ITEMS
+            local selected_str = item_name and item_name or ui_str.NO_MORE_ITEMS
             local new_index    = draw_settings_menu(selected_str, filter, custom_data.names, item_name and custom_data.selected_index, false)
             if new_index then custom_data.selected_index = new_index end
             imgui.pop_item_width()
@@ -1546,7 +1548,9 @@ local function center_text(text, font_size, color)
     if font_size then imgui.pop_font_size() end
 end
 
-local was_cancel_key_down = false
+local was_cancel_key_down    = false
+local keep_stop_button_width = 410
+local keep_stop_button_size  = { keep_stop_button_width, 50 }
 local function draw_mod_keep_searching()
     if keep_searching.context_ptr then
         local is_cancel_key_down = imgui.is_key_down(imgui.ImGuiKey.Key_Escape) or imgui.is_key_down(imgui.ImGuiKey.Key_MouseRight)
@@ -1568,13 +1572,11 @@ local function draw_mod_keep_searching()
     center_text(ui_str.HOW_TO_STOP_2, 18, 0xFF00FF00)
     imgui.spacing(); imgui.spacing();
 
-    local button_width = 410
-    local button_size  = { button_width, 50 }    
-    local current_pos  = imgui.get_cursor_pos()
-    local button_x     = (window_width - button_width) * 0.5
+    local current_pos       = imgui.get_cursor_pos()
+    local button_x          = (window_width - keep_stop_button_width) * 0.5
     imgui.set_cursor_pos({ button_x, current_pos.y })
     imgui.push_font_size(24)
-    if draw_button(ui_str.STOP_BUTTON, button_size) then keep_searching.stop() end
+    if draw_button(ui_str.STOP_BUTTON, keep_stop_button_size) then keep_searching.stop() end
     imgui.pop_font_size()
     imgui.spacing()
     cursor_helper.draw_custom_cursor(config.cursor_scale)
