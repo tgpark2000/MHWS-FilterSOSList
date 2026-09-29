@@ -107,9 +107,11 @@ local UI_TEXT = {
         HIGHEST_QUANTITY     = "Highest Quantity of ",
         SORT_BY              = "Sort by ",
         DESCENDING           = "  (High to Low)",
+        OPERATOR_AND         = "AND",
+        OPERATOR_OR          = "OR",
     },
     WITHOUT_PASSWORD = {
-        TEXT = "Show only quests without a password",
+        TEXT = "Show only quests without a passcode",
     },
     AVALIABLE_SLOTS = {
         TEXT = "Show only quests with available slots",

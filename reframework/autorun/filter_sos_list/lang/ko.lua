@@ -6,7 +6,7 @@ local this = {
     WINDOW_OPEN_MSG_2 = "화면에 새로 띄워진 메뉴창을 이용해주세요.",
     ENABLED           = "작동중",
     DISABLED          = "작동 중지",
-    KEEP_SEARCHING    = "구조신호 퀘스트에서 자동으로 재검색",
+    KEEP_SEARCHING    = "구조신호 퀘스트에서 검색 결과 없을 때 재검색하기",
     QUEST_JOIN_APPROVAL = {
         DISABLED = "설정한 참가 승인 모드의 퀘스트만 보여줍니다",
         ENABLED  = "참가 승인 모드:",
@@ -108,6 +108,8 @@ local this = {
         HIGHEST_QUANTITY     = "가장 많은 아이템 대상: ",
         SORT_BY              = "정렬 대상: ",
         DESCENDING           = "  (내림차순)",
+        OPERATOR_AND         = "및",
+        OPERATOR_OR          = "또는",
     },
     WITHOUT_PASSWORD = {
         TEXT = "비밀번호가 없는 퀘스트만 보여줍니다",

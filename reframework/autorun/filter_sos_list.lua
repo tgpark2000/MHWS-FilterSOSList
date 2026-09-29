@@ -3,12 +3,12 @@ local fs, imgui, io, json, log, math, os, pcall, re, sdk, string, table, thread,
 local MOD_TITLE <const>   = "Filter SOS List"
 local CONFIG_FILE <const> = string.gsub(MOD_TITLE, " ", "_"):lower() .. ".json"
 local is_window_open      = false
-local language_manager    = require("reframework.autorun.filter_sos_list.language")
-local array               = require("reframework.autorun.filter_sos_list.array")
+local language_manager    = require("filter_sos_list.language")
+local array               = require("filter_sos_list.array")
 local UI_TEXT
 
 local cursor_helper 
-xpcall(function() cursor_helper = require("reframework.autorun._lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
+xpcall(function() cursor_helper = require("_lib._CursorDrawHelper") end, function() cursor_helper = { failed_require = true, draw_custom_cursor = function()
         if reframework:is_drawing_ui() or not is_window_open then return end
 
         local mouse_pos   = imgui.get_mouse()
@@ -30,29 +30,6 @@ xpcall(function() cursor_helper = require("reframework.autorun._lib._CursorDrawH
         draw_list:add_triangle(p1, p2, p3, outline_color, 1.5)
     end } 
 end)
-
-local enemy_def            = sdk.find_type_definition("app.EnemyDef")
-local get_em_name          = enemy_def:get_method("EnemyName(app.EnemyDef.ID)")
-local get_is_em_valid      = enemy_def:get_method("isValid(app.EnemyDef.ID)")
-local get_is_em_boss       = enemy_def:get_method("isBossID(app.EnemyDef.ID)")
-local get_em_species_fixed = enemy_def:get_method("Species(app.EnemyDef.ID)") -- return app.EnemyDef.SPECIES_Fixed == (app.EnemyDef.SPECIES + 1)
-local get_em_species_data  = enemy_def:get_method("Data(app.EnemyDef.SPECIES)")
-local get_item_name        = sdk.find_type_definition("app.ItemDef"):get_method("NameString(app.ItemDef.ID)")
-local convert_guid_to_text = sdk.find_type_definition("app.MessageUtil"):get_method("getText(System.Guid, System.Int32)")
-local system_guid          = sdk.find_type_definition("System.Guid")
-local try_parse_guid       = system_guid:get_method("Parse(System.String)")
-local create_system_guid   = function(guid_string) return try_parse_guid and try_parse_guid:call(nil, guid_string) end
-local create_guid_string   = function(guid_obj) return guid_obj and string.format("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", guid_obj.mData1, guid_obj.mData2, guid_obj.mData3, guid_obj.mData4_0, guid_obj.mData4_1, guid_obj.mData4_2, guid_obj.mData4_3, guid_obj.mData4_4, guid_obj.mData4_5, guid_obj.mData4_6, guid_obj.mData4_7) end
-local system_guid_cache    = {}
-local function get_system_guid(guid_string)
-    if not guid_string then return nil end
-    local guid = system_guid_cache[guid_string]
-    if not guid then
-        guid                           = create_system_guid(guid_string)
-        system_guid_cache[guid_string] = guid
-    end
-    return guid
-end
 
 local config = {
     enabled       = true,
@@ -110,7 +87,7 @@ local config = {
         },        
         quest_join_approval = {
             enabled = true,
-            value   = "Auto-accept",
+            value   = true, 
         },
         quest_started_time = {
             enabled = false,
@@ -119,20 +96,20 @@ local config = {
         },
         quest_multiplay_setting = {
             enabled = false,
-            value   = "Players & Support Hunters",
+            value   = 1,
         },
         quest_fields = {
             enabled = false,
-            list    = { ["Plains"] = false, ["Forest"] = false, ["Basin"] = false, ["Cliffs"] = false, ["Wyveria"] = false, ["Wounded Hollow"] = false, ["Rimechain Peak"] = false, ["Dragontorch Shrine"] = false, ["Forgotten Machineworks"] = false },
+            list    = {}, 
         },
         quest_environment  = {
             enabled = false,
-            list    = { ["Plenty"] = false, ["Fallow"] = false, ["Inclemency"] = false }
+            list    = {}, 
         },
         mission_type = {
             enabled = false,
             value   = 0,
-            list    = { ["Assignments"] = false, ["Optional Quests"] = false, ["Investigations"] = false, ["Event Quests"] = false },
+            list    = {} 
         },
         gathering_boost = {
             enabled = false,
@@ -140,15 +117,15 @@ local config = {
         limit_weapon = {
             enabled = false,
             reserve = { enabled = false },
-            list    = { ["Great Sword"] = false, ["Sword & Shield"] = false, ["Dual Blades"] = false, ["Long Sword"] = false, ["Hammer"] = false, ["Hunting Horn"] = false, ["Lance"] = false, ["Gunlance"] = false, ["Switch Axe"] = false, ["Charge Blade"] = false, ["Insect Glaive"] = false, ["Bow"] = false, ["Heavy Bowgun"] = false, ["Light Bowgun"] = false }
+            list    = {} 
         },
     },
     item_filters = {
         enabled = false,
-        mode    = "Custom",
+        mode    = 1,
         custom = {
-            operator    = "AND",
-            target_list = { ["469"] = false, ["470"] = false, ["478"] = false, ["157"] = false, ["620"] = false, ["653"] = false, ["820"] = false, ["WISHLIST"] = false, ["GEM"] = false, }, -- ["item_id"] = number or false
+            operator    = 1, 
+            target_list = {} 
         },
         max_quantity = {
             target_item = "469",
@@ -164,7 +141,7 @@ local config = {
         },
         quest_join_approval = {
             enabled = false,
-            value   = "Auto-accept",
+            value   = true,
         },
         joinable_quest = {
             enabled = false,
@@ -182,71 +159,15 @@ local config = {
     cursor_scale = 1.5,
 }
 
-local ITEM_ID_MAP <const> = {
-    ["469"]      = "Basic Material",           -- 보통 소재
-    ["470"]      = "Valuable Material",        -- 높은 가치를 지닌 소재
-    ["478"]      = "Ancient Weapon Fragment",  -- 낡은 무기 조각
-    ["157"]      = "Ancient Orb - Armor",      -- 낡은 구슬 - 갑
-    ["620"]      = "Ancient Orb - Sword",      -- 낡은 구슬 - 검
-    ["653"]      = "Heavy Armor Sphere",       -- 중갑옥
-    ["820"]      = "Glowing Stone",            -- 빛나는 부적
-    ["WISHLIST"] = "Wishlisted Item", 
-    ["GEM"]      = "Monster Gem",
-}
-
-local ITEM_NAME_MAP <const> = {
-    ["Basic Material"]          = "469",
-    ["Valuable Material"]       = "470",
-    ["Ancient Weapon Fragment"] = "478",
-    ["Ancient Orb - Armor"]     = "157",
-    ["Ancient Orb - Sword"]     = "620",
-    ["Heavy Armor Sphere"]      = "653",
-    ["Glowing Stone"]           = "820",
-}
-
-local GEM_ID_LIST <const> = { "36", "91", "333", "350", "387", "423", "436", "451", "464", "485", "533", "567", "105", "704", "559", "716", "726", "553", "734" }
 local EVALUATORS <const>  = {
-    ["at least"] = function(current, required)                   return (current >= required) end,
-    ["at most"]  = function(current, required)                   return (current <= required) end,
-    ["exactly"]  = function(current, required)                   return (current == required) end,
     ["between"]  = function(current, required_min, required_max) return ((current >= required_min) and (current <= required_max)) end,
     ["outside"]  = function(current, required_min, required_max) return ((current <  required_min) or  (current >  required_max)) end,
 }
-
-local MULTIPLAY_TYPE_LIST <const>   = {  "Players & Support Hunters",       "Only Players" }
-local MULTIPLAY_TYPE_LOOKUP <const> = { ["Players & Support Hunters"] = 1, ["Only Players"] = 2 }
-
-local REWARD_MODE_LIST <const>   = {  "Custom",       "Max Quantity",       "Target Reward Filter" }
-local REWARD_MODE_LOOKUP <const> = { ["Custom"] = 1, ["Max Quantity"] = 2, ["Target Reward Filter"] = 3 }
-
-local FIELD_LIST <const>   = {       "Plains",       "Forest",       "Basin",       "Cliffs",       "Wyveria",       "Wounded Hollow",        "Rimechain Peak",        "Dragontorch Shrine",        "Forgotten Machineworks" }
-local FIELD_ID_MAP <const> = { [0] = "Plains", [1] = "Forest", [2] = "Basin", [3] = "Cliffs", [4] = "Wyveria", [9] = "Wounded Hollow", [10] = "Rimechain Peak", [11] = "Dragontorch Shrine", [13] = "Forgotten Machineworks" }
-
-local ENVIRONMENT_LIST <const>    = {       "Plenty",       "Fallow",       "Inclemency" }
-local ENVIRONMENT_ID_MAP <const>  = { [2] = "Plenty", [0] = "Fallow", [1] = "Inclemency" }
-
-local ACCEPT_MODE_LIST <const>   = {  "Auto-accept",          "Manual Accept" }
-local ACCEPT_MODE_LOOKUP <const> = { ["Auto-accept"] = 1,    ["Manual Accept"] = 2 }
-local is_auto_accept <const>     = { ["Auto-accept"] = true, ["Manual Accept"] = false, ["Auto"] = true, ["Manula"] = false }
-
-local MISSION_TYPE_LIST <const>   = {       "Assignments",                            "Optional Quests",       "Investigations",                               "Event Quests" }
-local MISSION_TYPE_ID_MAP <const> = { [0] = "Assignments", [1] = "Assignments", [2] = "Optional Quests", [4] = "Investigations", [5] = "Investigations", [6] = "Event Quests" }
-
-local WEAPON_LIST <const>   = {       "Great Sword",       "Sword & Shield",       "Dual Blades",       "Long Sword",       "Hammer",       "Hunting Horn",       "Lance",       "Gunlance",       "Switch Axe",       "Charge Blade",        "Insect Glaive",        "Bow",        "Heavy Bowgun",        "Light Bowgun" }
-local WEAPON_ID_MAP <const> = { [0] = "Great Sword", [1] = "Sword & Shield", [2] = "Dual Blades", [3] = "Long Sword", [4] = "Hammer", [5] = "Hunting Horn", [6] = "Lance", [7] = "Gunlance", [8] = "Switch Axe", [9] = "Charge Blade", [10] = "Insect Glaive", [11] = "Bow", [12] = "Heavy Bowgun", [13] = "Light Bowgun" }
 
 local NPC_ONLY <const>            = sdk.find_type_definition("app.net_quest_session.cCreateQuestSessionInfo.MULTIPLAY_SETTING"):get_field("NPC_ONLY"):get_data() or 2
 local SERCH_RESCUE_SIGNAL <const> = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("SERCH_RESCUE_SIGNAL"):get_data()
 local RECRUITMENT_LOBBY <const>   = sdk.find_type_definition("app.GUI050000.CATEGORY"):get_field("RECRUITMENT_LOBBY"):get_data()
 
-local LOCALIZED_TEXT = {
-    MAP             = {},
-    MULTIPLAY_TYPES = {},
-    ACCEPT_MODE     = {},
-    REWARD_MODE     = {},
-    EM_NAME_LIST    = {},
-    EM_SPECIES_LIST = {},
-}
 local GUID_MAP <const>   = {
     ["Plains"]                    = "e232918e-ee5a-4723-9618-ad8799eb8dc1",
     ["Forest"]                    = "ce61d1bb-48ba-4256-b321-a98c7699abd0",
@@ -303,11 +224,35 @@ local GUID_MAP <const>   = {
     ["gathering boost"]           = "47e87983-6e7c-44dd-b3b2-f1cac33cd4a2",
 }
 
+local enemy_def            = sdk.find_type_definition("app.EnemyDef")
+local get_em_name          = enemy_def:get_method("EnemyName(app.EnemyDef.ID)")
+local get_is_em_valid      = enemy_def:get_method("isValid(app.EnemyDef.ID)")
+local get_is_em_boss       = enemy_def:get_method("isBossID(app.EnemyDef.ID)")
+local get_em_species_fixed = enemy_def:get_method("Species(app.EnemyDef.ID)") -- return app.EnemyDef.SPECIES_Fixed == (app.EnemyDef.SPECIES + 1)
+local get_em_species_data  = enemy_def:get_method("Data(app.EnemyDef.SPECIES)")
+local get_item_name        = sdk.find_type_definition("app.ItemDef"):get_method("NameString(app.ItemDef.ID)")
+local convert_guid_to_text = sdk.find_type_definition("app.MessageUtil"):get_method("getText(System.Guid, System.Int32)")
+local system_guid          = sdk.find_type_definition("System.Guid")
+local try_parse_guid       = system_guid:get_method("Parse(System.String)")
+local create_system_guid   = function(guid_string) return try_parse_guid and try_parse_guid:call(nil, guid_string) end
+local create_guid_string   = function(guid_obj) return guid_obj and string.format("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", guid_obj.mData1, guid_obj.mData2, guid_obj.mData3, guid_obj.mData4_0, guid_obj.mData4_1, guid_obj.mData4_2, guid_obj.mData4_3, guid_obj.mData4_4, guid_obj.mData4_5, guid_obj.mData4_6, guid_obj.mData4_7) end
+local system_guid_cache    = {}
+local function get_system_guid(guid_string)
+    if not guid_string then return nil end
+    local guid = system_guid_cache[guid_string]
+    if not guid then
+        guid                           = create_system_guid(guid_string)
+        system_guid_cache[guid_string] = guid
+    end
+    return guid
+end
+
+local LOCALIZED_TEXT = {}
 local function get_localized_text(key)
-    local text = LOCALIZED_TEXT.MAP[key]
+    local text = LOCALIZED_TEXT[key]
     if text then return text end
 
-    if (type(key) == "string") then  -- Maybe guid-string
+    if (type(key) == "string") then  -- guid-string
         local guid_str = GUID_MAP[key]
         if not guid_str then return key end
 
@@ -316,167 +261,280 @@ local function get_localized_text(key)
 
         text = convert_guid_to_text:call(nil, guid, 0)
         if not text then return key end
-    elseif (type(key) == "number") then  -- Maybe app.ItemDef.ID
+    elseif (type(key) == "number") then  -- app.ItemDef.ID
         text = get_item_name:call(nil, key)
         if not text then return key end
 
-        LOCALIZED_TEXT.MAP[ITEM_ID_MAP[tostring(key)]] = text    
+        LOCALIZED_TEXT[tostring(key)] = text    
     end
 
-    LOCALIZED_TEXT.MAP[key] = text
+    LOCALIZED_TEXT[key] = text
     return text
 end
 
-local ENEMY_BOSS = {
-    NAME_MAP         = {}, 
-    ID_MAP           = {}, 
-    SPECIES_ID_MAP   = {}, -- hash map: ["species id"] = species string
-    SPECIES_TYPE_MAP = {},
-    INVALID_SPECIES  = sdk.find_type_definition("app.EnemyDef.SPECIES_Fixed"):get_field("INVARID"):get_data() or 0,  -- 필드명이 'INVARID' 였다
+local dataset = { -- name: localized target name
+    item = {
+        targets = { "469", "470", "478", "157", "620", "653", "820", "WISHLIST", "GEM" },
+        gem_ids = { "36", "91", "333", "350", "387", "423", "436", "451", "464", "485", "533", "567", "105", "704", "559", "716", "726", "553", "734" },
+        names   = {},  -- [index] = name
+        lookup  = {},  -- [name] = id and [id] = index
+        modes   = {},
+        custom = {  -- menu
+            operators    = {},
+            names        = {},
+            lookup       = {},
+            selected_index = 1,
+        },
+        width = {
+            name = 0,
+            mode = 0,
+            operator = 0,
+        },
+    },
+    em_boss = {
+        names = {},
+        name_map = {},
+        species = {},
+        species_map = {},
+        INVALID_SPECIES  = sdk.find_type_definition("app.EnemyDef.SPECIES_Fixed"):get_field("INVARID"):get_data() or 0,  -- 필드명이 'INVARID' 였다
+    },
+    multiplay_setting = {
+        targets = { "Players & Support Hunters", "Only Players" },
+        names   = {},
+        width   = 0,
+    },
+    accept_mode = {
+        targets = { "Auto-accept", "Manual Accept" },
+        names   = {},
+        width   = 0,
+    },
+    field = {
+        targets = { "Plains", "Forest", "Basin", "Cliffs", "Wyveria", "Wounded Hollow", "Rimechain Peak", "Dragontorch Shrine", "Forgotten Machineworks" },
+        names   = {},
+        lookup  = { "0", "1", "2", "3", "4", "9", "10", "11", "13" },
+    },
+    environment = {
+        targets = { "Fallow", "Inclemency", "Plenty" },
+        names   = {},
+        lookup  = {},
+    },
+    mission_type = {
+        targets = { "Assignments", "Optional Quests", "Investigations", "Event Quests" },
+        names   = {},
+        lookup  = { [0] = "1", [1] = "1", [2] = "2", [4] = "3", [5] = "3", [6] = "4" },
+    },
+    weapon = {
+        targets = { "Great Sword", "Sword & Shield", "Dual Blades", "Long Sword", "Hammer", "Hunting Horn", "Lance", "Gunlance", "Switch Axe", "Charge Blade", "Insect Glaive", "Bow", "Heavy Bowgun", "Light Bowgun" },
+        names   = {},
+    },
+    language = {
+        names = {},
+        width = 0,
+    }
 }
-function ENEMY_BOSS.update()
+function dataset.item.localize()
+    local this      = dataset.item
+    this.names      = {}
+    this.lookup     = {}
+    this.width.name = 0
+    for i, id in ipairs(this.targets) do 
+        local name 
+        if     (id == "WISHLIST") then name = "Wishlisted Item"
+        elseif (id == "GEM")      then name = "Monster Gem"
+        else                           name = get_item_name:call(nil, tonumber(id)) end
+        table.insert(this.names, name)
+        this.lookup[name] = id
+        this.lookup[id]   = i
+        local size = imgui.calc_text_size(name).x + 30
+        if size > this.width.name then this.width.name = size end
+    end
+end
+function dataset.item.set_localization(localized_reward_items)
+    local this = dataset.item
+    this.modes = {}
+    table.insert(this.modes, localized_reward_items.CUSTOM)
+    table.insert(this.modes, localized_reward_items.MAX_QUANTITY)
+    table.insert(this.modes, localized_reward_items.TARGET_REWARD_FILTER)
+    this.custom.operators = {}
+    table.insert(this.custom.operators, localized_reward_items.OPERATOR_AND)
+    table.insert(this.custom.operators, localized_reward_items.OPERATOR_OR)
+    this.width.mode = 0
+    for _, text in ipairs(this.modes) do 
+        local size = imgui.calc_text_size(text).x + 30
+        if size > this.width.mode then this.width.mode = size end
+    end
+    this.width.operator = 0
+    for _,text in ipairs(this.custom.operators) do 
+        local size = imgui.calc_text_size(text).x + 30
+        if size > this.width.operator then this.width.operator = size end
+    end
+end
+function dataset.item.custom.generate_list()
+    local target_list  = config.item_filters.custom.target_list
+    local this          = dataset.item
+    local custom        = this.custom
+          custom.names  = {}
+          custom.lookup = {}
+    for i, id in ipairs(this.targets) do
+        if not target_list[id] then 
+            table.insert(custom.names, this.names[i])
+            custom.lookup[#custom.names] = id
+        end
+    end
+end
+function dataset.em_boss.localize()
     local enemy_def_id = sdk.find_type_definition("app.EnemyDef.ID")
-    if not enemy_def_id then return 60 end
+    if not enemy_def_id then return end
 
-    local fields                   = enemy_def_id:get_fields()
-    local config_name_list         = config.general_filters.monster_name.list
-    local config_species_list      = config.general_filters.monster_species.list
-    ENEMY_BOSS.NAME_MAP            = {}
-    ENEMY_BOSS.ID_MAP              = {}
-    ENEMY_BOSS.SPECIES_ID_MAP      = {}
-    ENEMY_BOSS.SPECIES_TYPE_MAP    = {}
-    LOCALIZED_TEXT.EM_NAME_LIST    = {}
-    LOCALIZED_TEXT.EM_SPECIES_LIST = {}
+    local fields     = enemy_def_id:get_fields()
+    local this       = dataset.em_boss
+    this.names       = {}
+    this.name_map    = {}
+    this.species     = {}
+    this.species_map = {}
     for i, field in ipairs(fields) do
         repeat
             if not field:is_static() then break end
             local id = field:get_data()
             if not get_is_em_valid:call(nil, id) or not get_is_em_boss:call(nil, id) then break end
             local species_fixed = get_em_species_fixed:call(nil, id)
-            if (species_fixed == ENEMY_BOSS.INVALID_SPECIES) then break end
-
-            local specics_data  = get_em_species_data:call(nil, species_fixed - 1)
-            local guid_specics  = specics_data:get_EmSpeciesName()
+            if (species_fixed == this.INVALID_SPECIES) then break end
+            
             local guid_name     = get_em_name:call(nil, id)
             local name          = convert_guid_to_text:call(nil, guid_name, 0)
-            local specics_type  = convert_guid_to_text:call(nil, guid_specics, 0)
-            id                                        = tostring(id)
-            species_fixed                             = tostring(species_fixed)
-            ENEMY_BOSS.NAME_MAP[name]                 = id
-            ENEMY_BOSS.ID_MAP[id]                     = name
-            ENEMY_BOSS.SPECIES_ID_MAP[species_fixed]  = specics_type
-            ENEMY_BOSS.SPECIES_TYPE_MAP[specics_type] = species_fixed
-            table.insert(LOCALIZED_TEXT.EM_NAME_LIST, name)
-            if not array.is_contains(LOCALIZED_TEXT.EM_SPECIES_LIST, specics_type) then table.insert(LOCALIZED_TEXT.EM_SPECIES_LIST, specics_type) end
-            if (config_name_list[id]               == nil)                         then config_name_list[id]               = false                 end
-            if (config_species_list[species_fixed] == nil)                         then config_species_list[species_fixed] = false                 end
+                  id            = tostring(id)
+            this.name_map[id]   = name
+            this.name_map[name] = id
+            table.insert(this.names, name)
+
+            local species_data              = get_em_species_data:call(nil, species_fixed - 1)
+            local guid_species              = species_data:get_EmSpeciesName()
+            local species                   = convert_guid_to_text:call(nil, guid_species, 0)
+                  species_fixed             = tostring(species_fixed)
+            this.species_map[species]       = species_fixed
+            this.species_map[species_fixed] = species
+            if not array.is_contains(this.species, species) then table.insert(this.species, species) end
         until true
     end
 end
-
-local function setup_localized_text()
-    LOCALIZED_TEXT.MAP             = {}
-    LOCALIZED_TEXT.MULTIPLAY_TYPES = {}
-    LOCALIZED_TEXT.ACCEPT_MODE     = {}
-    LOCALIZED_TEXT.REWARD_MODE     = {}
-    for _, text in ipairs(MULTIPLAY_TYPE_LIST) do 
-        table.insert(LOCALIZED_TEXT.MULTIPLAY_TYPES, get_localized_text(text))
-    end    
-    for _, text in ipairs(ACCEPT_MODE_LIST) do 
-        table.insert(LOCALIZED_TEXT.ACCEPT_MODE, get_localized_text(text))
-    end
-    table.insert(LOCALIZED_TEXT.REWARD_MODE, UI_TEXT.REWARD_ITEMS.CUSTOM)
-    table.insert(LOCALIZED_TEXT.REWARD_MODE, UI_TEXT.REWARD_ITEMS.MAX_QUANTITY)
-    table.insert(LOCALIZED_TEXT.REWARD_MODE, UI_TEXT.REWARD_ITEMS.TARGET_REWARD_FILTER)
-end
-
-local ITEM_FILTERS ={
-    REQUIRED_REWARDS = {
-        list   = { "Basic Material", "Valuable Material", "Ancient Weapon Fragment", "Ancient Orb - Armor", "Ancient Orb - Sword", "Heavy Armor Sphere", "Glowing Stone" },
-        lookup = { ["469"] = 1, ["470"] = 2, ["478"] = 3, ["157"] = 4, ["620"] = 5, ["653"] = 6, ["820"] = 7 },
-    },
-    CUSTOM_MODE = {
-        operators       = {  "AND",       "OR" },
-        operator_lookup = { ["AND"] = 1, ["OR"] = 2 },
-        list            = {},
-        lookup          = {},
-        selected_index  = 1,
-    },
-}
-function ITEM_FILTERS.CUSTOM_MODE.update()
-    local target_items     = config.item_filters.custom.target_list
-    local filtering        = ITEM_FILTERS.CUSTOM_MODE
-          filtering.list   = {}
-          filtering.lookup = {}
-
-    for item_id, item_name in pairs(ITEM_ID_MAP) do
-        if (target_items[item_id] == nil) then target_items[item_id] = false end
-        if not target_items[item_id] then
-            table.insert(filtering.list, get_localized_text(tonumber(item_id) or item_id))
-            filtering.lookup[#filtering.list] = item_id
-        end
+function dataset.multiplay_setting.localize()
+    local this = dataset.multiplay_setting
+    this.names = {}
+    this.width = 0
+    for i, target in ipairs(this.targets) do 
+        local localized_text = get_localized_text(target)
+        table.insert(this.names, localized_text)
+        local size = imgui.calc_text_size(localized_text).x + 30
+        if size > this.width then this.width = size end
     end
 end
+function dataset.accept_mode.localize()
+    local this = dataset.accept_mode
+    this.names = {}
+    this.width = 0
+    for i, mode in ipairs(this.targets) do 
+        local localized_text = get_localized_text(mode)
+        table.insert(this.names, localized_text)
+        local size = imgui.calc_text_size(localized_text).x + 30
+        if size > this.width then this.width = size end
+    end
+end
+function dataset.field.localize()
+    local this  = dataset.field
+    this.names  = {}
+    for i, field in ipairs(this.targets) do
+        table.insert(this.names, get_localized_text(field))
+    end
+end
+function dataset.environment.localize()
+    local this  = dataset.environment
+    this.names  = {}
+    this.lookup = {}
+    for i, environment in ipairs(this.targets) do
+        table.insert(this.names, get_localized_text(environment))
+        table.insert(this.lookup, tostring(i - 1))
+    end
+end
+function dataset.mission_type.localize()
+    local this = dataset.mission_type
+    this.names  = {}
+    for i, mission in ipairs(this.targets) do
+        table.insert(this.names, get_localized_text(mission))
+    end
+end
+function dataset.weapon.localize()
+    local this = dataset.weapon
+    this.names  = {}
+    for i, weapon in ipairs(this.targets) do 
+        table.insert(this.names, get_localized_text(weapon))
+    end
+end
+function dataset.language.set_localization(language_list)
+    local this = dataset.language
+    this.names = {}
+    this.width = 0
+    for i, language in ipairs(language_list) do
+        table.insert(this.names, language)
+        local size = imgui.calc_text_size(language).x + 30
+        if size > this.width then this.width = size end
+    end
+end
+function dataset.localize()
+    dataset.item.localize()
+    dataset.em_boss.localize()
+    dataset.multiplay_setting.localize()
+    dataset.accept_mode.localize()
+    dataset.field.localize()
+    dataset.environment.localize()
+    dataset.mission_type.localize()
+    dataset.weapon.localize()
+end
+function build_default_config()
+    local this = dataset.em_boss
+    local list = config.general_filters.monster_name.list
+    for _, name in ipairs(this.names) do 
+        local id = this.name_map[name]
+        list[id] = false
+    end
 
-local UI_TEXT_SIZE = {}
-local UI_COMBO_WIDTH = {
-    enemy_species         = 60,
-    multiplay_types       = 60,
-    filter_modes          = 40,
-    custom_mode_operators = 30,
-    localized_items       = 80,
-    accept_modes          = 40,
-    languages             = 50,
-}
-function UI_COMBO_WIDTH.update()
-    local width = 0
-    for i, text in ipairs(LOCALIZED_TEXT.EM_SPECIES_LIST) do
-        local size = imgui.calc_text_size(text).x
-        if (size > width) then width = size end
+    list = config.general_filters.monster_species.list 
+    for _, species in ipairs(this.species) do 
+        local id = this.species_map[species]
+        list[id] = false
     end
-    UI_COMBO_WIDTH.enemy_species = width + 30
 
-    width = 0
-    for i, text in pairs(LOCALIZED_TEXT.MULTIPLAY_TYPES) do 
-        local size = imgui.calc_text_size(text).x
-        if (size > width) then width = size end
+    this = dataset.field
+    list = config.general_filters.quest_fields.list
+    for i, _ in ipairs(this.names) do 
+        local id = this.lookup[i]
+        list[id] = false
     end
-    UI_COMBO_WIDTH.multiplay_types = width + 30
 
-    width = 0
-    for i, text in pairs(LOCALIZED_TEXT.ACCEPT_MODE) do 
-        local size = imgui.calc_text_size(text).x
-        if (size > width) then width = size end
+    this = dataset.environment
+    list = config.general_filters.quest_environment.list
+    for i, _ in ipairs(this.names) do 
+        local id = this.lookup[i]
+        list[id] = false
     end
-    UI_COMBO_WIDTH.accept_modes = width + 30
 
-    width = 0
-    for i, text in pairs(LOCALIZED_TEXT.REWARD_MODE) do 
-        local size = imgui.calc_text_size(text).x
-        if (size > width) then width = size end
+    this = dataset.mission_type
+    list = config.general_filters.mission_type.list
+    for i, _ in ipairs(this.names) do 
+        local id = tostring(i)
+        list[id] = false
     end
-    UI_COMBO_WIDTH.filter_modes = width + 30
 
-    width = 0 
-    for item_id, item_name in pairs(ITEM_ID_MAP) do 
-        local size = imgui.calc_text_size(get_localized_text(tonumber(item_id) or item_id)).x
-        if (size > width) then width = size end
+    this = dataset.weapon
+    list = config.general_filters.limit_weapon.list
+    for i = 0, #this.targets - 1 do 
+        list[tostring(i)] = false
     end
-    UI_COMBO_WIDTH.localized_items = width + 30
-    
-    width = 0
-    for i, text in pairs(ITEM_FILTERS.CUSTOM_MODE.operators) do 
-        local size = imgui.calc_text_size(text).x
-        if (size > width) then width = size end
-    end
-    UI_COMBO_WIDTH.custom_mode_operators = width + 30
 
-    width = 0
-    for _, language in ipairs(language_manager.get_name_list()) do
-        local size = imgui.calc_text_size(language).x
-        if (size > width) then width = size end
+    this = dataset.item
+    list = config.item_filters.custom.target_list
+    for _, id in ipairs(this.targets) do 
+        list[id] = false
     end
-    UI_COMBO_WIDTH.language = width + 30
 end
 
 local old_config = nil
@@ -492,6 +550,13 @@ local function load_config()
     local loaded = json.load_file(CONFIG_FILE)
     if not loaded then save_config(true) return end 
     if (type(loaded) == "table") then array.merge(config, loaded) end
+
+    if (type(config.general_filters.quest_multiplay_setting.value)        ~= "number")  then config.general_filters.quest_multiplay_setting.value        = 1    end
+    if (type(config.item_filters.mode)                                    ~= "number")  then config.item_filters.mode                                    = 1    end
+    if (type(config.item_filters.custom.operator)                         ~= "number")  then config.item_filters.custom.operator                         = 1    end
+    if (type(config.general_filters.quest_join_approval.value)            ~= "boolean") then config.general_filters.quest_join_approval.value            = true end
+    if (type(config.lobby_member_quest_filters.quest_join_approval.value) ~= "boolean") then config.lobby_member_quest_filters.quest_join_approval.value = true end
+
     old_config = array.deep_copy(config)
 end 
 
@@ -504,14 +569,17 @@ local function initLanguageFile()
     UI_TEXT = language_manager.get_ui_text(language_code)
 end
 
-local function initialize()  
-    ENEMY_BOSS.update() -- load_config() 이전
+local function initialize()
+    dataset.localize()
+    build_default_config()
     load_config()
     initLanguageFile()
-    setup_localized_text()
-    ITEM_FILTERS.CUSTOM_MODE.update() -- load_config() 이후
-    UI_COMBO_WIDTH.update() -- 가장 마지막
+    dataset.language.set_localization(language_manager.get_name_list())
+    dataset.item.set_localization(UI_TEXT.REWARD_ITEMS)
+    dataset.item.custom.generate_list()
 end 
+
+
 local SCENE_TYPE_INVALID = sdk.find_type_definition("app.cFieldSceneParam.SCENE_TYPE"):get_field("INVALID"):get_data()
 local game_flow_manager  = sdk.get_managed_singleton("app.GameFlowManager")
 if game_flow_manager and (game_flow_manager:get_CurrentGameScene() ~= SCENE_TYPE_INVALID) then initialize() end
@@ -555,7 +623,7 @@ local filter_order = {
 local filter_methods = { -- return true if the quest should be filtered out (removed) from the list
     ["quest_join_approval"] = function(quest_data, filter) 
         local session_data = quest_data.Session  -- app.cGUIQuestViewData.cGUISessionData
-        return (is_auto_accept[filter.value] ~= session_data:get_isAutoAccept())
+        return (filter.value ~= session_data:get_isAutoAccept())
     end,
     ["quest_started_time"] = function(quest_data, filter) 
         local session_data       = quest_data.Session
@@ -567,19 +635,19 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     ["quest_multiplay_setting"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()  -- app.net_session_manager.SessionManager.cSearchResultQuest
-        return (search_result.multiplaySetting ~= (MULTIPLAY_TYPE_LOOKUP[filter.value] - 1))
+        return (search_result.multiplaySetting ~= (filter.value - 1))
     end,
     ["quest_fields"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()
-        local field         = FIELD_ID_MAP[search_result.fieldId]
-        return not filter.list[field]
+        local field_id      = tostring(search_result.fieldId)
+        return not filter.list[field_id]
     end,
     ["quest_environment"] = function(quest_data, filter) 
         local session_data  = quest_data.Session
         local search_result = session_data:get_SearchResult()
-        local environment   = ENVIRONMENT_ID_MAP[search_result.envType]
-        return not filter.list[environment]
+        local env_type      = tostring(search_result.envType)
+        return not filter.list[env_type]
     end,
     ["blocked_users"] = function(quest_data, filter) 
         local session_data = quest_data.Session
@@ -694,8 +762,8 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
         local session_data     = quest_data.Session
         local search_result    = session_data:get_SearchResult()
         local mission_type     = search_result:getMissionType()  -- app.MissionTypeList.TYPE,  MAINSTORY:0, SIDESTORY:1, FREEQUEST:2, KEEPQUEST:4, INSTANTQUEST:5, STREAM_EVENTQUEST:6
-        local mission_type_str = MISSION_TYPE_ID_MAP[mission_type]
-        return not filter.list[mission_type_str]
+        local mission_type_id  = dataset.mission_type.lookup[mission_type]
+        return not filter.list[mission_type_id]
     end,
     ["quest_type"] = function(quest_data, filter)
         local session_data = quest_data.Session
@@ -710,14 +778,12 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     ["limit_weapon"] = function(quest_data, filter)
         local session_data    = quest_data.Session
         local main_weapons    = session_data:get_MainWeaponType() -- app.WeaponDef.TYPE[]
-        local reserve_weapons = session_data:get_ReserveWeaponType() 
+        local reserve_weapons = session_data:get_ReserveWeaponType()
         local is_target       = filter.list
         local found           = false
         for i = 0, (main_weapons:get_size() - 1) do 
-            local main_wp        = main_weapons[i].value__
-            local reserve_wp     = reserve_weapons[i].value__
-            local main_weapon    = WEAPON_ID_MAP[main_wp]
-            local reserve_weapon = WEAPON_ID_MAP[reserve_wp]
+            local main_weapon    = tostring(main_weapons[i].value__)
+            local reserve_weapon = tostring(reserve_weapons[i].value__)
             if (is_target[main_weapon] or (filter.reserve.enabled and is_target[reserve_weapon])) then found = true; break end
         end
         return found
@@ -731,12 +797,12 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
             local item_id                  = tostring(item_work:get_ItemId())
             local item_num                 = item_work.Num or 0
             local quest_reward_on_wishlist = is_wishlist_item:call(wishlist_util, tonumber(item_id))
-            if quest_reward_on_wishlist                then reward_table["WISHLIST"] = (reward_table["WISHLIST"] and reward_table["WISHLIST"] or 0) + item_num end
-            if array.is_contains(GEM_ID_LIST, item_id) then item_id                  = "GEM"                                                                   end
+            if quest_reward_on_wishlist                           then reward_table["WISHLIST"] = (reward_table["WISHLIST"] and reward_table["WISHLIST"] or 0) + item_num end
+            if array.is_contains(dataset.item.gem_ids, item_id) then item_id                  = "GEM"                                                                   end
             reward_table[item_id] = (reward_table[item_id] and reward_table[item_id] or 0) + item_num
         end
 
-        local is_logical_or = (filter.custom.operator == "OR")
+        local is_logical_or = (filter.custom.operator == 2)
         local target_list   = filter.custom.target_list
         for item_id, min_required in pairs(target_list) do
             if min_required then
@@ -827,35 +893,8 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
     end,
 }
 
-local function draw_settings_checkbox(setting_name, filter)
-    local changed, value = imgui.checkbox("##filter_sos_list_" .. setting_name, filter.enabled or false)
-    if changed then filter.enabled = value end
-    return value
-end
-
-local function draw_settings_text_input(setting_name, filter, min, max, default)
-    local width = imgui.calc_text_size(tostring(max)).x + 10
-    imgui.push_item_width(width)
-    local changed, value = imgui.input_text("##filter_sos_list_" .. setting_name, filter.value, 4097)  -- Chars Decimal: 1, Auto Select All: 4096
-    local value = tonumber(value) or default
-    if changed and (value >= min) and (value <= max) then filter.value = value end
-    imgui.pop_item_width()
-    return value
-end
-
-local function draw_settings_menu(setting_name, filter, menus, selected_index, is_allow_multi_checked)
-    if not imgui.begin_menu(setting_name .. "##menus" .. #menus, true) then return end
-    local new_index = nil
-    for i, name in ipairs(menus) do
-        local is_checked = is_allow_multi_checked and (filter.list[name] == true) or (i == selected_index)
-        if imgui.menu_item(get_localized_text(name), nil, is_checked, filter.enabled) then new_index = i end
-    end
-    cursor_helper.draw_custom_cursor(config.cursor_scale)
-    imgui.end_menu()
-    return new_index
-end
-
 local slider_range_active_handle = nil
+local slider_range_text_size = {}
 local slider_range_data = {
     ["host_hr"]            = { width = 330, height = 20, limit_min = 1, limit_max = 999, step_size = 10, min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%4d  \u{2264}  %s  \u{2264}  %4d" },
     ["host_hr_threshold"]  = { width = 170, height = 20, limit_min = 1, limit_max = 10,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
@@ -875,8 +914,8 @@ local function draw_slider_range_int(id, setting, center_text)
     local current_min  = math.max(setting.min, limit_min)
     local current_max  = math.min(setting.max, limit_max)
     local display_text = (current_min == current_max) and (center_text .. " = " .. current_min) or string.format(data.formatter, current_min, center_text, current_max)
-    if not UI_TEXT_SIZE[display_text] then UI_TEXT_SIZE[display_text] = imgui.calc_text_size(display_text) end
-    local text_size     = UI_TEXT_SIZE[display_text]
+    if not slider_range_text_size[display_text] then slider_range_text_size[display_text] = imgui.calc_text_size(display_text) end
+    local text_size     = slider_range_text_size[display_text]
     local text_center_x = cursor_pos.x + (data.width / 2) - (text_size.x / 2)
 
     local bar_y          = cursor_pos.y + 10
@@ -964,6 +1003,76 @@ local function draw_button(name, size)
     return is_clicked
 end
 
+local function draw_settings_checkbox(setting_name, filter)
+    local changed, value = imgui.checkbox("##filter_sos_list_" .. setting_name, filter.enabled or false)
+    if changed then filter.enabled = value end
+    return value
+end
+
+local function draw_settings_text_input(setting_name, filter, min, max, default)
+    local width = imgui.calc_text_size(tostring(max)).x + 10
+    imgui.push_item_width(width)
+    local changed, value = imgui.input_text("##filter_sos_list_" .. setting_name, filter.value, 4097)  -- Chars Decimal: 1, Auto Select All: 4096
+    local value = tonumber(value) or default
+    if changed and (value >= min) and (value <= max) then filter.value = value end
+    imgui.pop_item_width()
+    return value
+end
+
+local function draw_settings_menu(setting_name, filter, menus, selected_index, is_allow_multi_checked)
+    if not imgui.begin_menu(setting_name .. "##menus" .. #menus, true) then return end
+    local new_index = nil
+    for i, name in ipairs(menus) do
+        local is_checked = is_allow_multi_checked and (filter.list[name] == true) or (i == selected_index)
+        if imgui.menu_item(name, nil, is_checked, filter.enabled) then new_index = i end
+    end
+    cursor_helper.draw_custom_cursor(config.cursor_scale)
+    imgui.end_menu()
+    return new_index
+end
+
+local reset_button_size = { 50, 24 }
+local get_id_func_list  = { -- ["param type"] = function ... end
+    ["number"] = function(param, i, value) return tostring(i + param)      end,
+    ["table"]  = function(param, i, value) return param[value] or param[i] end,
+}
+
+local function draw_settings_menuset(setting_name, filter, menus, param, ui_str)
+    local str             = nil
+    local remaining_count = nil
+    local get_id_func     = get_id_func_list[type(param)]
+    for i, value in ipairs(menus) do
+        local id = get_id_func(param, i, value)
+        if filter.list[id] then
+            if not remaining_count then
+                local next_str = (str and str .. "," or "") .. value
+                if (imgui.calc_text_size(next_str).x > 230) then remaining_count = 1
+                else                                             str = next_str      end
+            else
+                remaining_count = remaining_count + 1
+            end
+        end
+    end
+    if not str or (str == "") then str = ui_str.NO_SELECTED
+    else
+        if remaining_count                                                          then str = str .. ui_str.AND .. tostring(remaining_count) .. ui_str.MORE end
+        if draw_button(ui_str.RESET .. "##btn_" .. setting_name, reset_button_size) then for k, v in pairs(filter.list) do filter.list[k] = false end        end
+        imgui.same_line()
+    end
+    imgui.set_next_item_width(280)
+    if imgui.begin_menu(str .. "##menu_" .. setting_name, true) then
+        for i, value in ipairs(menus) do
+            local id         = get_id_func(param, i, value)
+            local is_checked = filter.list[id] and (filter.list[id] == true)
+            if imgui.menu_item(value, nil, is_checked, filter.enabled) then 
+                filter.list[id] = not is_checked 
+            end
+        end
+        cursor_helper.draw_custom_cursor(config.cursor_scale)
+        imgui.end_menu()
+    end
+end
+
 local function draw_display_enabled(isEnable)
     if isEnable then imgui.text_colored(UI_TEXT.ENABLED,  0xFF00FF00)
     else             imgui.text_colored(UI_TEXT.DISABLED, 0xFF0000FF) end
@@ -986,13 +1095,16 @@ local function draw_mod_settings()
     if language_code_list then 
         imgui.same_line()
         local select_index = language_manager.get_lookup(UI_TEXT.language_code)
-        imgui.push_item_width(UI_COMBO_WIDTH.language)
+        imgui.push_item_width(dataset.language.width)
         local changed, new_index = imgui.combo("##filter_sos_list_languages", select_index, language_manager.get_name_list())
         imgui.pop_item_width()
         if changed then
             local language_code  = language_code_list[new_index]
             UI_TEXT              = language_manager.get_ui_text(language_code)
             config.language_code = UI_TEXT.language_code
+            dataset.language.set_localization(language_manager.get_name_list())
+            dataset.item.set_localization(UI_TEXT.REWARD_ITEMS)
+            dataset.item.custom.generate_list()
             save_config()
         end
     end
@@ -1004,7 +1116,7 @@ local function draw_mod_settings()
     draw_display_enabled(config.enabled and config.keep_searching.enabled and (config.general_filters.enabled or config.item_filters.enabled))
     -- General SOS Filters ------------------------------------------------------------------------------------------------------------------------------------
     local filters = config.general_filters
-    local filter, UI_STR
+    local filter, ui_str, data
     imgui.separator()
     draw_settings_checkbox("sos_flare_quests_filter", filters)
     imgui.same_line()
@@ -1014,343 +1126,182 @@ local function draw_mod_settings()
     if filters.enabled then
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_join_approval
-        UI_STR = UI_TEXT.QUEST_JOIN_APPROVAL
+        ui_str = UI_TEXT.QUEST_JOIN_APPROVAL
+        data   = dataset.accept_mode
         imgui.indent(10); draw_settings_checkbox("filter_accept_setting", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
         else
-            imgui.text(UI_STR.ENABLED)
+            imgui.text(ui_str.ENABLED)
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.accept_modes)
-            local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
-            local changed, new_index  = imgui.combo("##filter_sos_list_accept_setting", accept_option_index, LOCALIZED_TEXT.ACCEPT_MODE)
-            if changed then filter.value = ACCEPT_MODE_LIST[new_index] end
+            imgui.push_item_width(data.width)
+            local accept_option_index = filter.value and 1 or 2
+            local changed, new_index  = imgui.combo("##filter_sos_list_accept_setting", accept_option_index, data.names)
+            if changed then filter.value = (new_index == 1) end
             imgui.pop_item_width()
         end
         imgui.end_disabled()
         -- Quest Level ----------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_level
-        UI_STR = UI_TEXT.QUEST_LEVEL
+        ui_str = UI_TEXT.QUEST_LEVEL
         imgui.indent(10); draw_settings_checkbox("filter_quest_level", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else                       draw_slider_range_int("quest_level", filter, UI_STR.SLIDER_CENTER_TEXT) end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_slider_range_int("quest_level", filter, ui_str.SLIDER_CENTER_TEXT) end
         imgui.end_disabled() 
         -- Host hunter Rank -----------------------------------------------------------------------------------------------------------------------------------
         filter = filters.host_hr
-        UI_STR = UI_TEXT.HOST_HR
+        ui_str = UI_TEXT.HOST_HR
         imgui.indent(10); draw_settings_checkbox("filter_host_hr", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED) 
+        if not filter.enabled then imgui.text(ui_str.DISABLED) 
         else 
-            draw_slider_range_int("host_hr", filter, UI_STR.SLIDER_CENTER_TEXT)
+            draw_slider_range_int("host_hr", filter, ui_str.SLIDER_CENTER_TEXT)
             imgui.indent(30); draw_settings_checkbox("filter_host_hr_threshold", filter.threshold); imgui.unindent(30)
             imgui.same_line(); 
-            if not filter.threshold.enabled then imgui.text(UI_STR.THRESHOLD_DISABLED)
-            else                                 imgui.text(UI_STR.THRESHOLD_ENABLED); imgui.same_line()
-                                                draw_slider_range_int("host_hr_threshold", filter.threshold, UI_STR.SLIDER_CENTER_TEXT_THRESHOLD) end
+            if not filter.threshold.enabled then imgui.text(ui_str.THRESHOLD_DISABLED)
+            else                                 imgui.text(ui_str.THRESHOLD_ENABLED); imgui.same_line()
+                                                draw_slider_range_int("host_hr_threshold", filter.threshold, ui_str.SLIDER_CENTER_TEXT_THRESHOLD) end
         end
         imgui.end_disabled()
         -- Monster Name ---------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_name
-        UI_STR = UI_TEXT.MONSTER_NAME
+        ui_str = UI_TEXT.MONSTER_NAME
+        data   = dataset.em_boss
         imgui.indent(10); draw_settings_checkbox("monster_name", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else
-            local boss_names_str  = nil
-            local remaining_count = nil
-            for _, name in ipairs(LOCALIZED_TEXT.EM_NAME_LIST) do
-                local id         = ENEMY_BOSS.NAME_MAP[name]
-                local is_checked = filter.list[id] and (filter.list[id] == true)
-                if is_checked then
-                    local current_monster_name = ENEMY_BOSS.ID_MAP[id]
-                    if not remaining_count then
-                        local next_str = (boss_names_str and boss_names_str .. ", " or "") .. current_monster_name
-                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count = 1
-                        else                                             boss_names_str  = next_str end
-                    else
-                        remaining_count = remaining_count + 1
-                    end
-                end
-            end
-            if     not boss_names_str or (boss_names_str == "")              then boss_names_str = UI_STR.NO_SELECTED
-            else
-                if remaining_count                                           then boss_names_str = boss_names_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
-                if draw_button(UI_STR.RESET .. "##monster_name", { 50, 24 }) then filter.list    = {}                                                                       end
-                imgui.same_line()
-            end
-            imgui.set_next_item_width(280)
-            if imgui.begin_menu(boss_names_str .. "##menuName", true) then
-                for _, name in ipairs(LOCALIZED_TEXT.EM_NAME_LIST) do
-                    local id         = ENEMY_BOSS.NAME_MAP[name]
-                    local is_checked = filter.list[id] and (filter.list[id] == true)
-                    if imgui.menu_item(name, nil, is_checked, filter.enabled) then 
-                        filter.list[id] = not is_checked 
-                    end
-                end
-                cursor_helper.draw_custom_cursor(config.cursor_scale)
-                imgui.end_menu()
-            end
-        end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_settings_menuset("monster_name", filter, data.names, data.name_map, ui_str) end
         imgui.end_disabled()
         -- Misstion Type --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.mission_type
-        UI_STR = UI_TEXT.MISSION_TYPE
+        ui_str = UI_TEXT.MISSION_TYPE
+        data   = dataset.mission_type
         imgui.indent(10); draw_settings_checkbox("misstion_type", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else
-            local mission_type_str = nil
-            local remaining_count  = nil
-            for _, mission_type in ipairs(MISSION_TYPE_LIST) do 
-                if filter.list[mission_type] then
-                    if not remaining_count then 
-                        local next_str = (mission_type_str and mission_type_str .. "," or "") .. get_localized_text(mission_type)
-                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count  = 1
-                        else                                             mission_type_str = next_str end
-                    else
-                        remaining_count = remaining_count + 1
-                    end
-                end
-            end
-            if     not mission_type_str or (mission_type_str == "")          then mission_type_str = UI_STR.NO_SELECTED
-            else
-                if remaining_count                                           then mission_type_str = mission_type_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
-                if draw_button(UI_STR.RESET .. "##mission_type", { 50, 24 }) then for k, v in pairs(filter.list) do filter.list[k] = false end                                  end 
-                imgui.same_line()
-            end
-            local new_index = draw_settings_menu(mission_type_str, filter, MISSION_TYPE_LIST, 0, true)
-            if new_index then 
-                local mission_type        = MISSION_TYPE_LIST[new_index]
-                filter.list[mission_type] = not filter.list[mission_type]
-            end
-        end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_settings_menuset("mission_type", filter, data.names, 0, ui_str) end
         imgui.end_disabled()
         -- Monster Species ------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_species
-        UI_STR = UI_TEXT.MONSTER_SPECIES
+        ui_str = UI_TEXT.MONSTER_SPECIES
+        data   = dataset.em_boss
         imgui.indent(10); draw_settings_checkbox("filter_monster_species", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line() 
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else
-            local boss_species_str = nil
-            local remaining_count  = nil
-            for _, species in ipairs(LOCALIZED_TEXT.EM_SPECIES_LIST) do
-                local id         = ENEMY_BOSS.SPECIES_TYPE_MAP[species]
-                local is_checked = filter.list[id] and (filter.list[id] == true)
-                if is_checked then
-                    local current_monster_species = ENEMY_BOSS.SPECIES_ID_MAP[id]
-                    if not remaining_count then
-                        local next_str = (boss_species_str and boss_species_str .. ", " or "") .. current_monster_species
-                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count  = 1
-                        else                                             boss_species_str = next_str end
-                    else
-                        remaining_count = remaining_count + 1
-                    end
-                end
-            end
-            if     not boss_species_str or (boss_species_str == "")             then boss_species_str = UI_STR.NO_SELECTED
-            else
-                if remaining_count                                              then boss_species_str = boss_species_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
-                if draw_button(UI_STR.RESET .. "##monster_species", { 50, 24 }) then filter.list      = {}                                                                         end
-                imgui.same_line()
-            end
-            imgui.set_next_item_width(280)
-            if imgui.begin_menu(boss_species_str .. "##menuName", true) then
-                for _, species in ipairs(LOCALIZED_TEXT.EM_SPECIES_LIST) do
-                    local id         = ENEMY_BOSS.SPECIES_TYPE_MAP[species]
-                    local is_checked = filter.list[id] and (filter.list[id] == true)
-                    if imgui.menu_item(species, nil, is_checked, filter.enabled) then 
-                        filter.list[id] = not is_checked 
-                    end
-                end
-                cursor_helper.draw_custom_cursor(config.cursor_scale)
-                imgui.end_menu()
-            end
-        end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_settings_menuset("monster_species", filter, data.species, data.species_map, ui_str) end
         imgui.end_disabled()
         -- Monster Threat -------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_threat
-        UI_STR = UI_TEXT.MONSTER_THREAT
+        ui_str = UI_TEXT.MONSTER_THREAT
         imgui.indent(10); draw_settings_checkbox("filter_monster_threat", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else                       draw_slider_range_int("monster_threat", filter, UI_STR.SLIDER_CENTER_TEXT) end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_slider_range_int("monster_threat", filter, ui_str.SLIDER_CENTER_TEXT) end
         imgui.end_disabled()
         -- Monster Count --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.monster_count
-        UI_STR = UI_TEXT.MONSTER_COUNT
+        ui_str = UI_TEXT.MONSTER_COUNT
         imgui.indent(10); draw_settings_checkbox("monster_count", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else                       draw_slider_range_int("monster_count", filter, UI_STR.SLIDER_CENTER_TEXT) end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_slider_range_int("monster_count", filter, ui_str.SLIDER_CENTER_TEXT) end
         imgui.end_disabled()
         -- Current Player Count -------------------------------------------------------------------------------------------------------------------------------
         filter = filters.current_players
-        UI_STR = UI_TEXT.CURRENT_PLAYERS
+        ui_str = UI_TEXT.CURRENT_PLAYERS
         imgui.indent(10); draw_settings_checkbox("filter_current_players", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else                       draw_slider_range_int("current_players", filter, UI_STR.SLIDER_CENTER_TEXT) end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_slider_range_int("current_players", filter, ui_str.SLIDER_CENTER_TEXT) end
         imgui.end_disabled() 
         -- Max Player Count -----------------------------------------------------------------------------------------------------------------------------------
         filter = filters.max_players
-        UI_STR = UI_TEXT.MAX_PLAYERS
+        ui_str = UI_TEXT.MAX_PLAYERS
         imgui.indent(10); draw_settings_checkbox("filter_max_players", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line() 
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else                       draw_slider_range_int("max_players", filter, UI_STR.SLIDER_CENTER_TEXT) end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_slider_range_int("max_players", filter, ui_str.SLIDER_CENTER_TEXT) end
         imgui.end_disabled()
         -- Limit Weapons---------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.limit_weapon
-        UI_STR = UI_TEXT.LIMIT_WEAPON
+        ui_str = UI_TEXT.LIMIT_WEAPON
+        data   = dataset.weapon
         imgui.indent(10); draw_settings_checkbox("limit_weapon", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
         else
-            local equipped_weapons_str = nil
-            local remaining_count      = nil
-            for _, weapon in ipairs(WEAPON_LIST) do
-                if filter.list[weapon] then
-                    if not remaining_count then
-                        local next_str = (equipped_weapons_str and equipped_weapons_str .. "," or "") .. get_localized_text(weapon)
-                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count      = 1
-                        else                                             equipped_weapons_str = next_str end
-                    else
-                        remaining_count = remaining_count + 1
-                    end
-                end
-            end
-            if     not equipped_weapons_str or (equipped_weapons_str == "")   then equipped_weapons_str = UI_STR.NO_SELECTED
-            else
-                if remaining_count                                            then equipped_weapons_str = equipped_weapons_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
-                if draw_button(UI_STR.RESET .. "##limit_weapons", { 50, 24 }) then filter.list          = {}                                                                             end
-                imgui.same_line()
-            end
-            local new_index = draw_settings_menu(equipped_weapons_str, filter, WEAPON_LIST, 0, true)
-            if new_index then 
-                local weapon        = WEAPON_LIST[new_index]
-                filter.list[weapon] = not filter.list[weapon]
-            end
-            
+            draw_settings_menuset("limit_weapon", filter, data.names, -1, ui_str)            
             imgui.indent(30); draw_settings_checkbox("limit_weapon_reserve", filter.reserve); imgui.unindent(30)
             imgui.same_line()
-            imgui.text(UI_STR.APPLY_SECONDDARY)
+            imgui.text(ui_str.APPLY_SECONDDARY)
         end
         imgui.end_disabled()
         -- Started Time ---------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_started_time
-        UI_STR = UI_TEXT.STARTED_TIME
+        ui_str = UI_TEXT.STARTED_TIME
         imgui.indent(10); draw_settings_checkbox("filter_started_time", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else                       draw_slider_range_int("quest_started_time", filter, UI_STR.SLIDER_CENTER_TEXT) end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_slider_range_int("quest_started_time", filter, ui_str.SLIDER_CENTER_TEXT) end
         imgui.end_disabled()
         -- Multiplay Setting ----------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_multiplay_setting
-        UI_STR = UI_TEXT.MULTIPLAY_SETTINGS
+        ui_str = UI_TEXT.MULTIPLAY_SETTINGS
+        data   = dataset.multiplay_setting
         imgui.indent(10); draw_settings_checkbox("filter_multiplay_setting", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
         else 
-            imgui.text(UI_STR.ENABLED)
+            imgui.text(ui_str.ENABLED)
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.multiplay_types)
-            local multiplay_index = MULTIPLAY_TYPE_LOOKUP[filter.value] or 1
-            local changed, new_index = imgui.combo("##filter_sos_list_multiplay_setting_filter", multiplay_index, LOCALIZED_TEXT.MULTIPLAY_TYPES)
+            imgui.push_item_width(data.width)
+            local multiplay_index = filter.value
+            local changed, new_index = imgui.combo("##filter_sos_list_multiplay_setting_filter", multiplay_index, data.names)
             imgui.pop_item_width()
-            if changed then filter.value = MULTIPLAY_TYPE_LIST[new_index] end
+            if changed then filter.value = new_index end
         end
         imgui.end_disabled()
         -- Quest Field Setting --------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_fields
-        UI_STR = UI_TEXT.QUEST_FIELDS
+        ui_str = UI_TEXT.QUEST_FIELDS
+        data   = dataset.field
         imgui.indent(10); draw_settings_checkbox("filter_field", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else
-            local field_str       = nil
-            local remaining_count = nil
-            for _, field in ipairs(FIELD_LIST) do
-                if filter.list[field] then
-                    if not remaining_count then 
-                        local next_str = (field_str and field_str .. "," or "") .. get_localized_text(field) 
-                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count = 1
-                        else                                             field_str       = next_str end
-                    else
-                        remaining_count = remaining_count + 1
-                    end
-                end
-            end
-            if     not field_str or (field_str == "")                        then field_str = UI_STR.NO_SELECTED
-            else
-                if remaining_count                                           then field_str = field_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
-                if draw_button(UI_STR.RESET .. "##quest_fields", { 50, 24 }) then for k, v in pairs(filter.list) do filter.list[k] = false end                    end
-                imgui.same_line()
-            end
-            local new_index = draw_settings_menu(field_str, filter, FIELD_LIST, 0, true)
-            if new_index then 
-                local field        = FIELD_LIST[new_index]
-                filter.list[field] = not filter.list[field]
-            end
-        end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_settings_menuset("quest_field", filter, data.names, data.lookup, ui_str) end
         imgui.end_disabled()
         -- Environment Setting --------------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_environment
-        UI_STR = UI_TEXT.QUEST_ENV
+        ui_str = UI_TEXT.QUEST_ENV
+        data   = dataset.environment
         imgui.indent(10); draw_settings_checkbox("filter_environment", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
-        else
-            local environments_str = nil
-            local remaining_count  = nil
-            for _, environment in ipairs(ENVIRONMENT_LIST) do
-                if filter.list[environment] then
-                    if not remaining_count then 
-                        local next_str = (environments_str and environments_str .. "," or "") .. get_localized_text(environment) 
-                        if (imgui.calc_text_size(next_str).x > 230) then remaining_count  = 1
-                        else                                             environments_str = next_str end
-                    else
-                        remaining_count = remaining_count + 1
-                    end
-                end
-            end
-            if     not environments_str or (environments_str == "")          then environments_str = UI_STR.NO_SELECTED
-            else
-                if remaining_count                                           then environments_str = environments_str .. UI_STR.AND .. tostring(remaining_count) .. UI_STR.MORE end
-                if draw_button(UI_STR.RESET .. "##quest_envirs", { 50, 24 }) then for k, v in pairs(filter.list) do filter.list[k] = false end                                  end
-                imgui.same_line()
-            end
-            local new_index = draw_settings_menu(environments_str, filter, ENVIRONMENT_LIST, 0, true)
-            if new_index then 
-                local env      = ENVIRONMENT_LIST[new_index]
-                filter.list[env] = not filter.list[env]
-            end
-        end
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
+        else                       draw_settings_menuset("quest_environment", filter, data.names, -1, ui_str) end
         imgui.end_disabled()
         -- Wishlist Monster -----------------------------------------------------------------------------------------------------------------------------------
         filter = filters.wishlist
-        UI_STR = UI_TEXT.WHITELIST_DROP
+        ui_str = UI_TEXT.WHITELIST_DROP
         imgui.indent(10); draw_settings_checkbox("filter_wishlist", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text(UI_STR.TEXT)
+        imgui.text(ui_str.TEXT)
         imgui.end_disabled()
         -- Gathering Boost Quest ------------------------------------------------------------------------------------------------------------------------------
         filter = filters.gathering_boost
@@ -1361,16 +1312,17 @@ local function draw_mod_settings()
         imgui.end_disabled()
         -- Blocked Users --------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.blocked_users
-        UI_STR = UI_TEXT.BLOCKED_USERS
+        ui_str = UI_TEXT.BLOCKED_USERS
         imgui.indent(10); draw_settings_checkbox("filter_blocked_users", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text(UI_STR.TEXT)
+        imgui.text(ui_str.TEXT)
         imgui.end_disabled()
     end
     -- Item Filters -------------------------------------------------------------------------------------------------------------------------------------------
     filter = config.item_filters
-    UI_STR = UI_TEXT.REWARD_ITEMS
+    ui_str = UI_TEXT.REWARD_ITEMS
+    data   = dataset.item
     draw_settings_checkbox("item_filters_enabled", filter)
     imgui.same_line()
     imgui.text(get_localized_text("Bonus Rewards"))
@@ -1378,85 +1330,82 @@ local function draw_mod_settings()
     draw_display_enabled(config.enabled and filter.enabled)
     if filter.enabled then
         imgui.indent(10)
-        imgui.text(UI_STR.MODE)
+        imgui.text(ui_str.MODE)
         imgui.same_line()
-        imgui.push_item_width(UI_COMBO_WIDTH.filter_modes)
-        local filter_style_index = REWARD_MODE_LOOKUP[filter.mode] or 1
-        local changed, new_index = imgui.combo("##item_filter_mode", filter_style_index, LOCALIZED_TEXT.REWARD_MODE)
-        if changed then filter.mode = REWARD_MODE_LIST[new_index] end
+        imgui.push_item_width(data.width.mode)
+        local filter_style_index = filter.mode
+        local changed, new_index = imgui.combo("##item_filter_mode", filter_style_index, data.modes)
+        if changed then filter.mode = new_index end
         imgui.pop_item_width()
         if (filter_style_index == 1) then  -- Custom
-            local filtering = ITEM_FILTERS.CUSTOM_MODE
-                  filter    = filter.custom
-            imgui.text(UI_STR.CUSTOM_MODE_FILTER)
+            local custom_data = data.custom
+                  filter      = filter.custom
+            imgui.text(ui_str.CUSTOM_MODE_FILTER)
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.custom_mode_operators)
-            if not filter.operator then filter.operator = "AND" end
-            local custom_list_style_index = filtering.operator_lookup[filter.operator] or 1
-            local changed, new_index = imgui.combo("##item_filter_operator", custom_list_style_index, filtering.operators)
-            if changed then filter.operator = filtering.operators[new_index] end
+            imgui.push_item_width(data.width.operator)
+            local custom_list_style_index = filter.operator
+            local changed, new_index = imgui.combo("##item_filter_operator", custom_list_style_index, custom_data.operators)
+            if changed then filter.operator = new_index end
             imgui.pop_item_width()
-            imgui.text(UI_STR.SHOW_SOS_QUEST_WHERE)
+            imgui.text(ui_str.SHOW_SOS_QUEST_WHERE)
             for item_id, item_num in pairs(filter.target_list) do
                 if item_num then
                     if draw_button("-##item_filter_Remove_" .. item_id, { 24, 24 }) then
                         filter.target_list[item_id] = false
-                        filtering.update()
+                        custom_data.generate_list()
                     end
                     imgui.same_line()
                     imgui.text(get_localized_text(tonumber(item_id) or item_id))
                     imgui.same_line()
-                    imgui.text(UI_STR.APPEARS_AT_LEAST)
+                    imgui.text(ui_str.APPEARS_AT_LEAST)
                     imgui.same_line()
                     local value = draw_settings_text_input("_Amount_" .. tostring(item_id), { value = item_num }, 1, 99, 1)
                     if value ~= item_num then filter.target_list[item_id] = value end
                     imgui.same_line()
-                    imgui.text((value == 1) and UI_STR.TIME or UI_STR.TIMES)
+                    imgui.text((value == 1) and ui_str.TIME or ui_str.TIMES)
                     imgui.indent(30)
-                    imgui.text(filter.operator)
+                    imgui.text(custom_data.operators[filter.operator])
                     imgui.unindent(30)
                 end
             end
             imgui.same_line()
             imgui.text("..?")
-            if (#filtering.list > 0) then
-                if not filtering.list[filtering.selected_index] then filtering.selected_index = 1 end
-                if draw_button("+##item_filter_Add", { 24, 24 }) and (filtering.selected_index > 0) then
-                    local selected_item_id = filtering.lookup[filtering.selected_index]
+            if (#custom_data.names > 0) then
+                if not custom_data.names[custom_data.selected_index] then custom_data.selected_index = 1 end
+                if draw_button("+##item_filter_Add", { 24, 24 }) and (custom_data.selected_index > 0) then
+                    local selected_item_id = custom_data.lookup[custom_data.selected_index]
                     filter.target_list[selected_item_id] = 1
-                    filtering.update()
+                    custom_data.generate_list()
                 end
             else
                 imgui.invisible_button("#item_filter_Invisible_button", { 24, 24 })
             end
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.localized_items)
-            local item_name    = filtering.list[filtering.selected_index] 
-            local selected_str = item_name and get_localized_text(item_name) or UI_STR.NO_MORE_ITEMS
-            local new_index    = draw_settings_menu(selected_str, filter, filtering.list, item_name and filtering.selected_index, false)
-            if new_index then filtering.selected_index = new_index end
+            imgui.push_item_width(data.width.name)
+            local item_name    = custom_data.names[custom_data.selected_index] 
+            local selected_str = item_name and get_localized_text(item_name) or ui_str.NO_MORE_ITEMS
+            local new_index    = draw_settings_menu(selected_str, filter, custom_data.names, item_name and custom_data.selected_index, false)
+            if new_index then custom_data.selected_index = new_index end
             imgui.pop_item_width()
         elseif (filter_style_index == 2) then  -- Max Quantity
-            local filtering = ITEM_FILTERS.REQUIRED_REWARDS
-                  filter    = filter.max_quantity
-            imgui.text(UI_STR.HIGHEST_QUANTITY)
+            filter = filter.max_quantity
+            imgui.text(ui_str.HIGHEST_QUANTITY)
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.localized_items)
-            local selected_index = filtering.lookup[filter.target_item] or 1
-            local selected_str   = get_localized_text(filtering.list[selected_index]) or UI_STR.NO_ITEM_SELECTED
-            local new_index      = draw_settings_menu(selected_str, filter, filtering.list, selected_index, false)
-            if new_index then filter.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
+            imgui.push_item_width(data.width.name)
+            local selected_index = data.lookup[filter.target_item] or 1
+            local selected_str   = data.names[selected_index] or ui_str.NO_ITEM_SELECTED
+            local new_index      = draw_settings_menu(selected_str, filter, data.names, selected_index, false)
+            if new_index then filter.target_item = data.targets[new_index] end
             imgui.pop_item_width()
         else  -- Target Reward Filter
-            local filtering = ITEM_FILTERS.REQUIRED_REWARDS
-                  filter    = filter.target_reward_filter
-            imgui.text(UI_STR.SORT_BY)
+            filter = filter.target_reward_filter
+            imgui.text(ui_str.SORT_BY)
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.localized_items)
-            local selected_index = filtering.lookup[filter.target_item] or 1
-            local selected_str   = get_localized_text(filtering.list[selected_index]) or UI_STR.NO_ITEM_SELECTED
-            local new_index      = draw_settings_menu(selected_str .. UI_STR.DESCENDING, filter, filtering.list, selected_index, false)
-            if new_index then filter.target_item = ITEM_NAME_MAP[filtering.list[new_index]] end
+            imgui.push_item_width(data.width.name)
+            local selected_index = data.lookup[filter.target_item] or 1
+            local selected_str   = data.names[selected_index] or ui_str.NO_ITEM_SELECTED
+            local new_index      = draw_settings_menu(selected_str .. ui_str.DESCENDING, filter, data.names, selected_index, false)
+            if new_index then filter.target_item = data.targets[new_index] end
             imgui.pop_item_width()
         end
         imgui.unindent(10)
@@ -1472,52 +1421,52 @@ local function draw_mod_settings()
     if filters.enabled then
         -- Auto/Manual join approval --------------------------------------------------------------------------------------------------------------------------
         filter = filters.quest_join_approval
-        UI_STR = UI_TEXT.QUEST_JOIN_APPROVAL
+        ui_str = UI_TEXT.QUEST_JOIN_APPROVAL
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_accept_setting", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        if not filter.enabled then imgui.text(UI_STR.DISABLED)
+        if not filter.enabled then imgui.text(ui_str.DISABLED)
         else
-            imgui.text(UI_STR.ENABLED)
+            imgui.text(ui_str.ENABLED)
             imgui.same_line()
-            imgui.push_item_width(UI_COMBO_WIDTH.accept_modes)
-            local accept_option_index = ACCEPT_MODE_LOOKUP[filter.value] or 1
-            local changed, new_index  = imgui.combo("##filter_lobby_member_quest_list_accept_setting", accept_option_index, LOCALIZED_TEXT.ACCEPT_MODE)
-            if changed then filter.value = ACCEPT_MODE_LIST[new_index] end
+            imgui.push_item_width(dataset.accept_mode.width)
+            local accept_option_index = filter.value and 1 or 2
+            local changed, new_index  = imgui.combo("##filter_lobby_member_quest_list_accept_setting", accept_option_index, dataset.accept_mode.names)
+            if changed then filter.value = (new_index == 1) end
             imgui.pop_item_width()
         end
         imgui.end_disabled()
         -- without a password ---------------------------------------------------------------------------------------------------------------------------------
         filter = filters.without_password
-        UI_STR = UI_TEXT.WITHOUT_PASSWORD
+        ui_str = UI_TEXT.WITHOUT_PASSWORD
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_without_password", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text(UI_STR.TEXT)
+        imgui.text(ui_str.TEXT)
         imgui.end_disabled()
         -- available slots ----------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.joinable_quest
-        UI_STR = UI_TEXT.AVALIABLE_SLOTS
+        ui_str = UI_TEXT.AVALIABLE_SLOTS
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_joinable_quest", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text(UI_STR.TEXT)
+        imgui.text(ui_str.TEXT)
         imgui.end_disabled()
         --- blocked users ----------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.blocked_users
-        UI_STR = UI_TEXT.BLOCKED_USERS
+        ui_str = UI_TEXT.BLOCKED_USERS
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_blocked_users", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text(UI_STR.TEXT)
+        imgui.text(ui_str.TEXT)
         imgui.end_disabled()
         --- sos flare active -------------------------------------------------------------------------------------------------------------------------------------
         filter = filters.sos_flare_active
-        UI_STR = UI_TEXT.SOS_FLARE_ACTIVE
+        ui_str = UI_TEXT.SOS_FLARE_ACTIVE
         imgui.indent(10); draw_settings_checkbox("filter_lobby_member_quest_sos_flare_active", filter); imgui.unindent(10)
         imgui.begin_disabled(not filter.enabled)
         imgui.same_line()
-        imgui.text(UI_STR.TEXT)
+        imgui.text(ui_str.TEXT)
         imgui.end_disabled()
     end
     -- Mouse Cursor -------------------------------------------------------------------------------------------------------------------------------------------
@@ -1547,6 +1496,7 @@ function keep_searching.start()
         keep_searching.enabled                      = config.keep_searching.enabled
         keep_searching.is_open_dialog_failed_search = false
         is_window_open                              = false
+        save_config()
     end
 end
 function keep_searching.stop()
@@ -1580,11 +1530,12 @@ local function close_mod_settings_window()
 end
 
 local window_width
+local center_text_size = {}
 local function center_text(text, font_size, color)
-    if not text or (text == "") then return                                          end
-    if font_size                then imgui.push_font_size(font_size)                 end
-    if not UI_TEXT_SIZE[text]   then UI_TEXT_SIZE[text] = imgui.calc_text_size(text) end
-    local text_width  = UI_TEXT_SIZE[text].x
+    if not text or (text == "")   then return                                              end
+    if font_size                  then imgui.push_font_size(font_size)                     end
+    if not center_text_size[text] then center_text_size[text] = imgui.calc_text_size(text) end
+    local text_width  = center_text_size[text].x
     local current_pos = imgui.get_cursor_pos()
     local target_x    = (window_width - text_width) * 0.5
     imgui.set_cursor_pos({ target_x, current_pos.y })
@@ -1603,18 +1554,18 @@ local function draw_mod_keep_searching()
         was_cancel_key_down = is_cancel_key_down
     end
 
-    UI_STR       = UI_TEXT.AUTO_SEARCHING
+    local ui_str = UI_TEXT.AUTO_SEARCHING
     window_width = imgui.get_window_size().x
     imgui.spacing()
-    center_text(UI_STR.TITLE, 36, 0xFF00FFFF)
+    center_text(ui_str.TITLE, 36, 0xFF00FFFF)
     imgui.separator()
     imgui.spacing()
-    center_text(UI_STR.CAUSTION,   nil, nil)
-    center_text(UI_STR.CAUSTION_2, nil, nil)
-    center_text(UI_STR.CAUSTION_3, nil, nil)
+    center_text(ui_str.CAUSTION,   nil, nil)
+    center_text(ui_str.CAUSTION_2, nil, nil)
+    center_text(ui_str.CAUSTION_3, nil, nil)
     imgui.spacing()
-    center_text(UI_STR.HOW_TO_STOP,   18, 0xFF00FF00)
-    center_text(UI_STR.HOW_TO_STOP_2, 18, 0xFF00FF00)
+    center_text(ui_str.HOW_TO_STOP,   18, 0xFF00FF00)
+    center_text(ui_str.HOW_TO_STOP_2, 18, 0xFF00FF00)
     imgui.spacing(); imgui.spacing();
 
     local button_width = 410
@@ -1623,7 +1574,7 @@ local function draw_mod_keep_searching()
     local button_x     = (window_width - button_width) * 0.5
     imgui.set_cursor_pos({ button_x, current_pos.y })
     imgui.push_font_size(24)
-    if draw_button(UI_STR.STOP_BUTTON, button_size) then keep_searching.stop() end
+    if draw_button(ui_str.STOP_BUTTON, button_size) then keep_searching.stop() end
     imgui.pop_font_size()
     imgui.spacing()
     cursor_helper.draw_custom_cursor(config.cursor_scale)
@@ -1652,7 +1603,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
         else
             filter        = config.general_filters
             reward_filter = config.item_filters
-            if reward_filter.enabled then is_custom_mode = (reward_filter.mode == "Custom") end
+            if reward_filter.enabled then is_custom_mode = (reward_filter.mode == 1) end
         end
 
         for i = quest_list_size - 1, 0, -1 do
@@ -1660,7 +1611,7 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
             if quest_data then
                 local should_remove = false
                 for _, filter_name in ipairs(filter_order) do
-                    local filter_config = filter[filter_name] or (((filter_name == "item_reward_custom") and is_custom_mode) and reward_filter)
+                    local filter_config = (filter.enabled and filter[filter_name]) or (((filter_name == "item_reward_custom") and is_custom_mode) and reward_filter)
                     if filter_config and filter_config.enabled then
                         local filter_method = filter_methods[filter_name]
                         if filter_method and filter_method(quest_data, filter_config) then should_remove = true; break end
@@ -1671,9 +1622,9 @@ sdk.hook(sdk.find_type_definition("app.GUI050000QuestListParts"):get_method("sor
         end
 
         if reward_filter and reward_filter.enabled and not is_custom_mode then
-            if (reward_filter.mode == "Max Quantity") then filter_methods["item_reward_max_quantity"](quest_list, reward_filter.max_quantity.target_item)
-            else                                           filter_methods["item_reward_target_reward_filter"](quest_list, reward_filter.target_reward_filter.target_item)
-                                                           pre_hook_result = sdk.PreHookResult.SKIP_ORIGINAL
+            if (reward_filter.mode == 2) then filter_methods["item_reward_max_quantity"](quest_list, reward_filter.max_quantity.target_item)
+            else                              filter_methods["item_reward_target_reward_filter"](quest_list, reward_filter.target_reward_filter.target_item)
+                                              pre_hook_result = sdk.PreHookResult.SKIP_ORIGINAL
             end
         end
     until true
@@ -1726,5 +1677,3 @@ re.on_draw_ui(function()
         imgui.tree_pop()
 	end
 end)
-
-

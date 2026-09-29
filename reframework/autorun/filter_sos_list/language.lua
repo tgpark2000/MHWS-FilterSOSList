@@ -1,6 +1,6 @@
 local fs, imgui, io, json, log, math, os, pcall, re, sdk, string, table, thread, tonumber, tostring, type, ValueType, Vector2f, Vector3f, Vector4f, xpcall = fs, imgui, io, json, log, math, os, pcall, re, sdk, string, table, thread, tonumber, tostring, type, ValueType, Vector2f, Vector3f, Vector4f, xpcall
 
-local array = require("reframework.autorun.filter_sos_list.array")
+local array = require("filter_sos_list.array")
 
 local ui_text = {
     default = {
@@ -115,9 +115,11 @@ local ui_text = {
             HIGHEST_QUANTITY     = "Highest Quantity of ",
             SORT_BY              = "Sort by ",
             DESCENDING           = "  (High to Low)",
+            OPERATOR_AND         = "AND",
+            OPERATOR_OR          = "OR",
         },
         WITHOUT_PASSWORD = {
-            TEXT = "Show only quests without a password",
+            TEXT = "Show only quests without a passcode",
         },
         AVALIABLE_SLOTS = {
             TEXT = "Show only quests with available slots",
@@ -144,7 +146,7 @@ local function init()
     local files = fs.glob([[filter_sos_list\\lang\\.*\.lua$]], "$autorun")
     for _, file in ipairs(files) do 
         local code = string.gsub(string.sub(file, 22), ".lua", "")
-              file = "reframework.autorun.filter_sos_list.lang." .. code
+              file = "reframework.autorun.filter_sos_list.lang." .. code  -- MO2에선 에러가 발생되어서 reframework.autorun 붙인다
         local loaded_lang
         local success, err = pcall(function() loaded_lang = require(file) end)
         if success then 
