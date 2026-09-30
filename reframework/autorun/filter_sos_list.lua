@@ -898,14 +898,14 @@ local filter_methods = { -- return true if the quest should be filtered out (rem
 local slider_range_active_handle = nil
 local slider_range_text_size     = {}
 local slider_range_data          = {
-    ["host_hr"]            = { width = 330, height = 20, limit_min = 1, limit_max = 999, step_size = 10, min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%4d  \u{2264}  %s  \u{2264}  %4d" },
-    ["host_hr_threshold"]  = { width = 170, height = 20, limit_min = 1, limit_max = 10,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
-    ["monster_count"]      = { width = 330, height = 20, limit_min = 1, limit_max = 6,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
-    ["monster_threat"]     = { width = 330, height = 20, limit_min = 3, limit_max = 5,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
-    ["quest_level"]        = { width = 330, height = 20, limit_min = 1, limit_max = 10,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
-    ["max_players"]        = { width = 330, height = 20, limit_min = 2, limit_max = 4,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
-    ["current_players"]    = { width = 330, height = 20, limit_min = 1, limit_max = 3,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
-    ["quest_started_time"] = { width = 330, height = 20, limit_min = 0, limit_max = 60,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["host_hr"]            = { width = 310, height = 20, limit_min = 1, limit_max = 999, step_size = 10, min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%4d  \u{2264}  %s  \u{2264}  %4d" },
+    ["host_hr_threshold"]  = { width = 150, height = 20, limit_min = 1, limit_max = 10,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["monster_count"]      = { width = 310, height = 20, limit_min = 1, limit_max = 6,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["monster_threat"]     = { width = 310, height = 20, limit_min = 3, limit_max = 5,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["quest_level"]        = { width = 310, height = 20, limit_min = 1, limit_max = 10,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["max_players"]        = { width = 310, height = 20, limit_min = 2, limit_max = 4,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["current_players"]    = { width = 310, height = 20, limit_min = 1, limit_max = 3,   step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
+    ["quest_started_time"] = { width = 310, height = 20, limit_min = 0, limit_max = 60,  step_size = 1,  min_gap = 0, handle_size = Vector2f.new(12, 22), formatter = "%d  \u{2264}  %s  \u{2264}  %d"   },
 }
 local function draw_slider_range_int(id, setting, center_text)
     if not id then return end
