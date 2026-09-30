@@ -122,12 +122,13 @@ local this = {
     },
     AUTO_SEARCHING = {
         TITLE         = "자동 재검색중......",
-        CAUSTION      = "자동 재검색 기능은 게임 UI의 재검색 기능을 그대로 따라하기 때문에",
-        CAUSTION_2    = "UI 전환으로 인한 깜박이는 현상이 발생할 수 밖에 없습니다.",
-        HOW_TO_STOP   = "  멈추기 위해선 키보드의 [ESC], 마우스의 [오른쪽 버튼]을 누르거나  ",
-        HOW_TO_STOP_2 = "아래 녹색 [Stop Auto-Searching] 버튼을 클릭하세요.",
-        HOW_TO_STOP_3 = "",
-        STOP_BUTTON   = "[ Stop Auto-Searching ] ",
+        CAUTION       = "자동 재검색 기능은 게임 UI의 재검색 기능을 그대로 따라하기 때문에",
+        CAUTION_2     = "UI 전환으로 인한 깜박이는 현상이 발생할 수 밖에 없습니다.",
+        CAUTION_3     = "",
+        HOW_TO_STOP   = "자동 재검색을 멈추기 위해선 ",
+        HOW_TO_STOP_2 = "  키보드 [ESC], 마우스 [오른쪽 버튼], 게임패드(XBOX) [B]키를 누르거나  ",
+        HOW_TO_STOP_3 = "  아래 [Stop Auto-Searching] 버튼을 클릭하세요. ",
+        STOP_BUTTON   = "[ Stop Auto-Searching ]",
     },
 }
 

@@ -1553,9 +1553,13 @@ end
 local was_cancel_key_down    = false
 local keep_stop_button_width = 410
 local keep_stop_button_size  = { keep_stop_button_width, 50 }
+local gamepad_singleton      = sdk.get_native_singleton("via.hid.GamePad")
+local gamepad_type           = sdk.find_type_definition("via.hid.GamePad")
+local gamepad_device         = sdk.call_native_func(gamepad_singleton, gamepad_type, "get_Device()")
+local gamepad_cancel_button  = sdk.call_native_func(gamepad_singleton, gamepad_type, "get_CancelButton()")
 local function draw_mod_keep_searching()
     if keep_searching.context_ptr then
-        local is_cancel_key_down = imgui.is_key_down(imgui.ImGuiKey.Key_Escape) or imgui.is_key_down(imgui.ImGuiKey.Key_MouseRight)
+        local is_cancel_key_down = imgui.is_key_down(imgui.ImGuiKey.Key_Escape) or imgui.is_key_down(imgui.ImGuiKey.Key_MouseRight) or (gamepad_device and ((gamepad_device:get_Button() & gamepad_cancel_button) == gamepad_cancel_button))
         if is_cancel_key_down and not was_cancel_key_down then keep_searching.stop() end
         was_cancel_key_down = is_cancel_key_down
     end
@@ -1565,13 +1569,14 @@ local function draw_mod_keep_searching()
     imgui.spacing()
     center_text(ui_str.TITLE, 36, 0xFF00FFFF)
     imgui.separator()
-    imgui.spacing()
-    center_text(ui_str.CAUSTION,   nil, nil)
-    center_text(ui_str.CAUSTION_2, nil, nil)
-    center_text(ui_str.CAUSTION_3, nil, nil)
-    imgui.spacing()
+    imgui.spacing(); imgui.spacing();
+    center_text(ui_str.CAUTION,   nil, nil)
+    center_text(ui_str.CAUTION_2, nil, nil)
+    center_text(ui_str.CAUTION_3, nil, nil)
+    imgui.spacing(); imgui.spacing();
     center_text(ui_str.HOW_TO_STOP,   18, 0xFF00FF00)
     center_text(ui_str.HOW_TO_STOP_2, 18, 0xFF00FF00)
+    center_text(ui_str.HOW_TO_STOP_3, 18, 0xFF00FF00)
     imgui.spacing(); imgui.spacing();
 
     local current_pos       = imgui.get_cursor_pos()
