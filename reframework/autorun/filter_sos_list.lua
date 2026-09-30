@@ -496,45 +496,47 @@ function build_default_config()
     local list = config.general_filters.monster_name.list
     for _, name in ipairs(this.names) do 
         local id = this.name_map[name]
-        list[id] = false
+        if (list[id] == nil) then list[id] = false end
     end
 
     list = config.general_filters.monster_species.list 
     for _, species in ipairs(this.species) do 
         local id = this.species_map[species]
-        list[id] = false
+        if (list[id] == nil) then list[id] = false end
     end
 
     this = dataset.field
     list = config.general_filters.quest_fields.list
     for i, _ in ipairs(this.names) do 
         local id = this.lookup[i]
-        list[id] = false
+        if (list[id] == nil) then list[id] = false end
     end
 
     this = dataset.environment
     list = config.general_filters.quest_environment.list
     for i, _ in ipairs(this.names) do 
         local id = this.lookup[i]
-        list[id] = false
+        if (list[id] == nil) then list[id] = false end
     end
 
     this = dataset.mission_type
     list = config.general_filters.mission_type.list
     for i, _ in ipairs(this.names) do 
-        list[tostring(i)] = false
+        local id = tostring(i)
+        if (list[id] == nil) then list[id] = false end
     end
 
     this = dataset.weapon
     list = config.general_filters.limit_weapon.list
     for i = 0, #this.targets - 1 do 
-        list[tostring(i)] = false
+        local id = tostring(i)
+        if (list[id] == nil) then list[id] = false end
     end
 
     this = dataset.item
     list = config.item_filters.custom.target_list
     for _, id in ipairs(this.targets) do 
-        list[id] = false
+        if (list[id] == nil) then list[id] = false end
     end
 end
 
